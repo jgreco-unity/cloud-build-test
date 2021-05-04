@@ -1,0 +1,446 @@
+{
+    "entryScene": "SampleScene",
+    "touchData": [
+        {
+            "deltaTime": 0.0,
+            "emitSignal": "",
+            "eventType": 1,
+            "objectHierarchy": "Canvas",
+            "objectName": "Button",
+            "objectOffset": {
+                "x": 0.05000000074505806,
+                "y": 0.10000000149011612
+            },
+            "objectTag": "Untagged",
+            "pointerId": -1,
+            "position": {
+                "x": 0.5135135054588318,
+                "y": 0.5065501928329468
+            },
+            "positional": false,
+            "timeDelta": 0.8255894780158997,
+            "timeSinceStart": 0.8255894780158997,
+            "waitSignal": ""
+        },
+        {
+            "deltaTime": 0.0,
+            "emitSignal": "",
+            "eventType": 2,
+            "objectHierarchy": "Canvas",
+            "objectName": "Button",
+            "objectOffset": {
+                "x": 0.05000000074505806,
+                "y": 0.10000000149011612
+            },
+            "objectTag": "Untagged",
+            "pointerId": -1,
+            "position": {
+                "x": 0.5135135054588318,
+                "y": 0.5065501928329468
+            },
+            "positional": false,
+            "timeDelta": 0.6143369078636169,
+            "timeSinceStart": 1.4399263858795166,
+            "waitSignal": ""
+        },
+        {
+            "deltaTime": 0.0,
+            "emitSignal": "",
+            "eventType": 1,
+            "objectHierarchy": "Canvas",
+            "objectName": "Button",
+            "objectOffset": {
+                "x": 0.05000000074505806,
+                "y": 0.10000000149011612
+            },
+            "objectTag": "Untagged",
+            "pointerId": -1,
+            "position": {
+                "x": 0.5135135054588318,
+                "y": 0.5065501928329468
+            },
+            "positional": false,
+            "timeDelta": 0.43576526641845703,
+            "timeSinceStart": 1.8756916522979736,
+            "waitSignal": ""
+        },
+        {
+            "deltaTime": 0.0,
+            "emitSignal": "",
+            "eventType": 2,
+            "objectHierarchy": "Canvas",
+            "objectName": "Button",
+            "objectOffset": {
+                "x": 0.05000000074505806,
+                "y": 0.10000000149011612
+            },
+            "objectTag": "Untagged",
+            "pointerId": -1,
+            "position": {
+                "x": 0.5135135054588318,
+                "y": 0.5065501928329468
+            },
+            "positional": false,
+            "timeDelta": 0.619337797164917,
+            "timeSinceStart": 2.4950294494628906,
+            "waitSignal": ""
+        },
+        {
+            "deltaTime": 0.0,
+            "emitSignal": "",
+            "eventType": 1,
+            "objectHierarchy": "Canvas",
+            "objectName": "Button",
+            "objectOffset": {
+                "x": 0.05000000074505806,
+                "y": 0.10000000149011612
+            },
+            "objectTag": "Untagged",
+            "pointerId": -1,
+            "position": {
+                "x": 0.5135135054588318,
+                "y": 0.5065501928329468
+            },
+            "positional": false,
+            "timeDelta": 0.33582305908203125,
+            "timeSinceStart": 2.830852508544922,
+            "waitSignal": ""
+        },
+        {
+            "deltaTime": 0.0,
+            "emitSignal": "",
+            "eventType": 2,
+            "objectHierarchy": "Canvas",
+            "objectName": "Button",
+            "objectOffset": {
+                "x": 0.05000000074505806,
+                "y": 0.10000000149011612
+            },
+            "objectTag": "Untagged",
+            "pointerId": -1,
+            "position": {
+                "x": 0.5135135054588318,
+                "y": 0.5065501928329468
+            },
+            "positional": false,
+            "timeDelta": 0.07191061973571777,
+            "timeSinceStart": 2.9027631282806396,
+            "waitSignal": ""
+        },
+        {
+            "deltaTime": 0.0,
+            "emitSignal": "",
+            "eventType": 1,
+            "objectHierarchy": "Canvas",
+            "objectName": "Button",
+            "objectOffset": {
+                "x": 0.05000000074505806,
+                "y": 0.10000000149011612
+            },
+            "objectTag": "Untagged",
+            "pointerId": -1,
+            "position": {
+                "x": 0.5135135054588318,
+                "y": 0.5065501928329468
+            },
+            "positional": false,
+            "timeDelta": 0.08354043960571289,
+            "timeSinceStart": 2.9863035678863525,
+            "waitSignal": ""
+        },
+        {
+            "deltaTime": 0.0,
+            "emitSignal": "",
+            "eventType": 2,
+            "objectHierarchy": "Canvas",
+            "objectName": "Button",
+            "objectOffset": {
+                "x": 0.05000000074505806,
+                "y": 0.10000000149011612
+            },
+            "objectTag": "Untagged",
+            "pointerId": -1,
+            "position": {
+                "x": 0.5135135054588318,
+                "y": 0.5065501928329468
+            },
+            "positional": false,
+            "timeDelta": 0.08832812309265137,
+            "timeSinceStart": 3.074631690979004,
+            "waitSignal": ""
+        },
+        {
+            "deltaTime": 0.0,
+            "emitSignal": "",
+            "eventType": 1,
+            "objectHierarchy": "Canvas",
+            "objectName": "Button",
+            "objectOffset": {
+                "x": 0.05000000074505806,
+                "y": 0.10000000149011612
+            },
+            "objectTag": "Untagged",
+            "pointerId": -1,
+            "position": {
+                "x": 0.5135135054588318,
+                "y": 0.5065501928329468
+            },
+            "positional": false,
+            "timeDelta": 0.09083104133605957,
+            "timeSinceStart": 3.1654627323150635,
+            "waitSignal": ""
+        },
+        {
+            "deltaTime": 0.0,
+            "emitSignal": "",
+            "eventType": 2,
+            "objectHierarchy": "Canvas",
+            "objectName": "Button",
+            "objectOffset": {
+                "x": 0.05000000074505806,
+                "y": 0.10000000149011612
+            },
+            "objectTag": "Untagged",
+            "pointerId": -1,
+            "position": {
+                "x": 0.5135135054588318,
+                "y": 0.5065501928329468
+            },
+            "positional": false,
+            "timeDelta": 0.06839942932128906,
+            "timeSinceStart": 3.2338621616363525,
+            "waitSignal": ""
+        },
+        {
+            "deltaTime": 0.0,
+            "emitSignal": "",
+            "eventType": 1,
+            "objectHierarchy": "Canvas",
+            "objectName": "Button",
+            "objectOffset": {
+                "x": 0.05000000074505806,
+                "y": 0.10000000149011612
+            },
+            "objectTag": "Untagged",
+            "pointerId": -1,
+            "position": {
+                "x": 0.5135135054588318,
+                "y": 0.5065501928329468
+            },
+            "positional": false,
+            "timeDelta": 0.09340476989746094,
+            "timeSinceStart": 3.3272669315338135,
+            "waitSignal": ""
+        },
+        {
+            "deltaTime": 0.0,
+            "emitSignal": "",
+            "eventType": 2,
+            "objectHierarchy": "Canvas",
+            "objectName": "Button",
+            "objectOffset": {
+                "x": 0.05000000074505806,
+                "y": 0.10000000149011612
+            },
+            "objectTag": "Untagged",
+            "pointerId": -1,
+            "position": {
+                "x": 0.5135135054588318,
+                "y": 0.5065501928329468
+            },
+            "positional": false,
+            "timeDelta": 0.06812262535095215,
+            "timeSinceStart": 3.3953895568847656,
+            "waitSignal": ""
+        },
+        {
+            "deltaTime": 0.0,
+            "emitSignal": "",
+            "eventType": 1,
+            "objectHierarchy": "Canvas",
+            "objectName": "Button",
+            "objectOffset": {
+                "x": 0.05000000074505806,
+                "y": 0.10000000149011612
+            },
+            "objectTag": "Untagged",
+            "pointerId": -1,
+            "position": {
+                "x": 0.5135135054588318,
+                "y": 0.5065501928329468
+            },
+            "positional": false,
+            "timeDelta": 0.13540434837341309,
+            "timeSinceStart": 3.5307939052581787,
+            "waitSignal": ""
+        },
+        {
+            "deltaTime": 0.0,
+            "emitSignal": "",
+            "eventType": 2,
+            "objectHierarchy": "Canvas",
+            "objectName": "Button",
+            "objectOffset": {
+                "x": 0.05000000074505806,
+                "y": 0.10000000149011612
+            },
+            "objectTag": "Untagged",
+            "pointerId": -1,
+            "position": {
+                "x": 0.5135135054588318,
+                "y": 0.5065501928329468
+            },
+            "positional": false,
+            "timeDelta": 0.08551669120788574,
+            "timeSinceStart": 3.6163105964660645,
+            "waitSignal": ""
+        },
+        {
+            "deltaTime": 0.0,
+            "emitSignal": "",
+            "eventType": 1,
+            "objectHierarchy": "Canvas",
+            "objectName": "Button",
+            "objectOffset": {
+                "x": 0.05000000074505806,
+                "y": 0.10000000149011612
+            },
+            "objectTag": "Untagged",
+            "pointerId": -1,
+            "position": {
+                "x": 0.5135135054588318,
+                "y": 0.5065501928329468
+            },
+            "positional": false,
+            "timeDelta": 0.09294772148132324,
+            "timeSinceStart": 3.7092583179473877,
+            "waitSignal": ""
+        },
+        {
+            "deltaTime": 0.0,
+            "emitSignal": "",
+            "eventType": 2,
+            "objectHierarchy": "Canvas",
+            "objectName": "Button",
+            "objectOffset": {
+                "x": 0.05000000074505806,
+                "y": 0.10000000149011612
+            },
+            "objectTag": "Untagged",
+            "pointerId": -1,
+            "position": {
+                "x": 0.5135135054588318,
+                "y": 0.5065501928329468
+            },
+            "positional": false,
+            "timeDelta": 0.07310318946838379,
+            "timeSinceStart": 3.7823615074157715,
+            "waitSignal": ""
+        },
+        {
+            "deltaTime": 0.0,
+            "emitSignal": "",
+            "eventType": 1,
+            "objectHierarchy": "Canvas",
+            "objectName": "Button",
+            "objectOffset": {
+                "x": 0.05000000074505806,
+                "y": 0.10000000149011612
+            },
+            "objectTag": "Untagged",
+            "pointerId": -1,
+            "position": {
+                "x": 0.5135135054588318,
+                "y": 0.5065501928329468
+            },
+            "positional": false,
+            "timeDelta": 0.3007807731628418,
+            "timeSinceStart": 4.083142280578613,
+            "waitSignal": ""
+        },
+        {
+            "deltaTime": 0.0,
+            "emitSignal": "",
+            "eventType": 2,
+            "objectHierarchy": "Canvas",
+            "objectName": "Button",
+            "objectOffset": {
+                "x": 0.05000000074505806,
+                "y": 0.10000000149011612
+            },
+            "objectTag": "Untagged",
+            "pointerId": -1,
+            "position": {
+                "x": 0.5135135054588318,
+                "y": 0.5065501928329468
+            },
+            "positional": false,
+            "timeDelta": 0.06722688674926758,
+            "timeSinceStart": 4.150369167327881,
+            "waitSignal": ""
+        },
+        {
+            "deltaTime": 0.0,
+            "emitSignal": "",
+            "eventType": 1,
+            "objectHierarchy": "Canvas",
+            "objectName": "Button",
+            "objectOffset": {
+                "x": 0.05000000074505806,
+                "y": 0.10000000149011612
+            },
+            "objectTag": "Untagged",
+            "pointerId": -1,
+            "position": {
+                "x": 0.5135135054588318,
+                "y": 0.5065501928329468
+            },
+            "positional": false,
+            "timeDelta": 0.8032565116882324,
+            "timeSinceStart": 4.953625679016113,
+            "waitSignal": ""
+        },
+        {
+            "deltaTime": 0.0,
+            "emitSignal": "",
+            "eventType": 2,
+            "objectHierarchy": "Canvas",
+            "objectName": "Button",
+            "objectOffset": {
+                "x": 0.05000000074505806,
+                "y": 0.10000000149011612
+            },
+            "objectTag": "Untagged",
+            "pointerId": -1,
+            "position": {
+                "x": 0.5135135054588318,
+                "y": 0.5065501928329468
+            },
+            "positional": false,
+            "timeDelta": 0.48615169525146484,
+            "timeSinceStart": 5.439777374267578,
+            "waitSignal": ""
+        },
+        {
+            "deltaTime": 0.0,
+            "emitSignal": "playbackComplete",
+            "eventType": 0,
+            "objectHierarchy": "",
+            "objectName": "",
+            "objectOffset": {
+                "x": 0.0,
+                "y": 0.0
+            },
+            "objectTag": "",
+            "pointerId": 0,
+            "position": {
+                "x": 0.0,
+                "y": 0.0
+            },
+            "positional": false,
+            "timeDelta": 0.8805041313171387,
+            "timeSinceStart": 6.320281505584717,
+            "waitSignal": ""
+        }
+    ]
+}

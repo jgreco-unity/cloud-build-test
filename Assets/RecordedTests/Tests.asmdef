@@ -1,0 +1,24 @@
+{
+    "name": "RecordedTests",
+    "rootNamespace": "",
+    "references": [
+        "GUID:27619889b8ba8c24980f49ee34dbb44a",
+        "GUID:8322474d577bc9147b4606dbd1e742d8",
+        "GUID:0d42b047b71d6064d9f7abbbec55dbb4",
+        "GUID:f031f0b4c7fc77b41b9c67996ecd21c6",
+        "GUID:ca9e451dd14230248893aa444283bfa1"
+    ],
+    "includePlatforms": [],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": true,
+    "precompiledReferences": [
+        "nunit.framework.dll"
+    ],
+    "autoReferenced": true,
+    "defineConstraints": [
+        "UNITY_INCLUDE_TESTS"
+    ],
+    "versionDefines": [],
+    "noEngineReferences": false
+}
