@@ -1,3 +1,4 @@
+using System.IO;
 using Unity.CloudTesting.Editor;
 using UnityEditor;
 using UnityEngine;
@@ -10,7 +11,7 @@ namespace Unity.RecordedTesting.Editor
         {
             Debug.Log("CloudBuildPostExport: Build started - " + exportPath);
             CloudTestBuilder.BuildAndroid();
-            Debug.Log("CloudBuildPostExport: Build completed - " + CloudProjectSettings.accessToken);
+            Debug.Log($"CloudBuildPostExport: Build completed - {CloudTestPipeline.BuildPath} {File.Exists(CloudTestPipeline.BuildPath)}");
         }
     }
 }
