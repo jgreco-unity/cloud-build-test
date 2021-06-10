@@ -1,6 +1,6 @@
+using System;
 using System.IO;
 using Unity.CloudTesting.Editor;
-using UnityEditor;
 using UnityEngine;
 
 namespace Unity.RecordedTesting.Editor
@@ -9,8 +9,9 @@ namespace Unity.RecordedTesting.Editor
     {
         public static void PostExport(string exportPath)
         {
-            Debug.Log("CloudBuildPostExport: Build started - " + exportPath);
-            CloudTestBuilder.BuildAndroid();
+            var authToken = Environment.GetEnvironmentVariable("AUTH_TOKEN");
+            Debug.Log("CloudBuildPostExport: Build started - " + authToken);
+//            CloudTestBuilder.BuildAndroid();
             Debug.Log($"CloudBuildPostExport: Build completed - {CloudTestPipeline.BuildPath} {File.Exists(CloudTestPipeline.BuildPath)}");
         }
     }

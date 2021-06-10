@@ -1,2 +1,2 @@
 #!/bin/sh
-echo "CloudBuildPostBuild: $SERVICE_ACCOUNT_TOKEN"
+echo "CloudBuildPostBuild: $AUTH_TOKEN"
