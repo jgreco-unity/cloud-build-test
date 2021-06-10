@@ -8,7 +8,7 @@ namespace Tests
     public class ButtonTests01
     {
         // Use the "RecordingInput" attributed to specify the relative path to the recording file under Assets
-        [RecordedTest("Recordings/recording1.json")]
+//        [RecordedTest("Recordings/recording1.json")]
         public IEnumerator VerifyClickOnce()
         {
             var currTime = Time.time;

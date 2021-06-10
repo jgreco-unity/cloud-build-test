@@ -20,7 +20,7 @@ namespace Tests
             ButtonAction.count = 0;
             return base.Setup();
         }
-
+/*
         [UnityTest]
         [Timeout(10000)]
         [RecordedTest("Recordings/recording1.json")]
@@ -37,6 +37,7 @@ namespace Tests
 
             Assert.AreEqual(5, buttonClicks);
         }
+        */
         
         [UnityTest]
         [RecordedTest("Recordings/recording2.json")]

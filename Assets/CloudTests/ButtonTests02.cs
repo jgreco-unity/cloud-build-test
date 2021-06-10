@@ -8,7 +8,7 @@ namespace Tests
 {
     public class ButtonTests02
     {
-        [RecordedTest("Recordings/recording2.json")]
+//        [RecordedTest("Recordings/recording2.json")]
         public IEnumerator VerifyClickTwice()
         {
             var currTime = Time.time;
