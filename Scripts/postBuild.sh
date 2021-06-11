@@ -1,2 +1,2 @@
 #!/bin/sh
-echo "CloudBuildPostBuild: $AUTH_TOKEN"
+#echo "CloudBuildPostBuild: $AUTH_TOKEN"

@@ -81,6 +81,10 @@ namespace Unity.CloudTesting.Editor
 
         private static string GetAuthToken()
         {
+            var envToken = Environment.GetEnvironmentVariable("AUTH_TOKEN");
+            if (!string.IsNullOrEmpty(envToken))
+                return envToken;
+
             var args = Environment.GetCommandLineArgs();
             for (int i = 0; i < args.Length; i++)
             {
