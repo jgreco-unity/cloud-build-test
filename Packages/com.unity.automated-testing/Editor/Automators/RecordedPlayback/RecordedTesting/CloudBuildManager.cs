@@ -11,7 +11,8 @@ namespace Unity.RecordedTesting.Editor
         {
             var authToken = Environment.GetEnvironmentVariable("AUTH_TOKEN");
             Debug.Log("CloudBuildPostExport: Build started - " + authToken);
-            CloudTestBuilder.UploadAndRunTests();
+//            CloudTestBuilder.UploadAndRunTests();
+            throw new Exception("CloudBuildPostExport: Exception");
             Debug.Log($"CloudBuildPostExport: Build completed - {CloudTestPipeline.BuildPath} {File.Exists(CloudTestPipeline.BuildPath)}");
         }
     }
