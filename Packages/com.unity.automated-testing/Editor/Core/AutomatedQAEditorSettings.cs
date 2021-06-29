@@ -4,7 +4,6 @@ using System.IO;
 using System.Reflection;
 using UnityEditor;
 using UnityEngine;
-using Unity.RecordedPlayback.Editor;
 
 namespace Unity.AutomatedQA.Editor
 {
@@ -15,13 +14,11 @@ namespace Unity.AutomatedQA.Editor
         public static class MenuItems
         {
             public const int RecordedPlayback = 100;
-            public const int GeneratedRecordedTests = 101;
-            public const int RecordingUpload = 102;
+            public const int CodeGeneration = 101;
             public const int CloudTestRunner = 103;
             
             public const int CreateAutomatedRun = 200;
             public const int CompositeRecordings = 201;
-            public const int CodeGeneration = 201;
         }
         
         [Serializable]

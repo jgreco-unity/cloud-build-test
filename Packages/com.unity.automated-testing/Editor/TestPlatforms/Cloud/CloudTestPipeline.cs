@@ -40,7 +40,7 @@ namespace Unity.CloudTesting.Editor
             set => _buildFolder = value;
         }
 
-        public static string BuildName => $"{Application.identifier}.{BuildFileExtension}";
+        public static string BuildName => $"{Application.productName}.{BuildFileExtension}";
 
         public static string BuildFileExtension
         {
@@ -53,7 +53,7 @@ namespace Unity.CloudTesting.Editor
             }
         }
 
-        public static string IOSBuildDir => Path.Combine(BuildFolder, Application.identifier);
+        public static string IOSBuildDir => Path.Combine(BuildFolder, Application.productName);
 
         public static bool IsRunningOnCloud()
         {
@@ -164,6 +164,7 @@ namespace Unity.CloudTesting.Editor
             {
                 uwr.uploadHandler = uH;
                 uwr.SetRequestHeader("Authorization", "Bearer " + AccessToken);
+                Debug.Log($"URL: {url}, {AccessToken}");
                 AsyncOperation request = uwr.SendWebRequest();
 
                 while (!request.isDone)
@@ -344,7 +345,7 @@ namespace Unity.CloudTesting.Editor
         {
             ProcessStartInfo psi = new ProcessStartInfo();
             psi.FileName = "/usr/bin/xcodebuild";
-            psi.Arguments += "-project " + $"\"{IOSBuildDir}/Unity-iPhone.xcodeproj\"" +
+            psi.Arguments += "-allowProvisioningUpdates -project " + $"\"{IOSBuildDir}/Unity-iPhone.xcodeproj\"" +
                              " -scheme 'Unity-iPhone' -archivePath " +
                              $"\"{IOSBuildDir}/utf.xcarchive\" archive";
             psi.RedirectStandardOutput = true;
@@ -368,7 +369,14 @@ namespace Unity.CloudTesting.Editor
                 Debug.Log (proc.StandardOutput.ReadLine ());
             }
             proc.WaitForExit();
-            Debug.Log($"Generated ipa file at {BuildPath}");
+            if (File.Exists(BuildPath))
+            {
+                Debug.Log($"Generated ipa file at {BuildPath}");
+            }
+            else
+            {
+                HandleError($"Error generating ipa file {BuildPath}");
+            }
         }
 
         private static string TestResultsToHTML(string jobId, TestResultsResponse data)

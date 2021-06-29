@@ -1,6 +1,5 @@
 using System;
 using System.Collections.Generic;
-using System.Diagnostics;
 using Unity.AutomatedQA;
 using Unity.AutomatedQA.Editor;
 using Unity.CloudTesting.Editor;

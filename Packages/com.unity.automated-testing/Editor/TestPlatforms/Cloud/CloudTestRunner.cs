@@ -19,7 +19,7 @@ namespace Unity.CloudTesting.Editor
             {
                 playerOptions.options &= ~(BuildOptions.AutoRunPlayer);
 #if UNITY_IOS
-                playerOptions.locationPathName = Path.Combine(CloudTestPipeline.BuildFolder, Application.identifier);
+                playerOptions.locationPathName = CloudTestPipeline.IOSBuildDir;
 #else
                 playerOptions.locationPathName = CloudTestPipeline.BuildPath;
 #endif

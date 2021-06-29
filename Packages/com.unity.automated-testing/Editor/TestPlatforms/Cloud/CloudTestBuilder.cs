@@ -62,7 +62,6 @@ namespace Unity.CloudTesting.Editor
         public static void CreateBuild()
         {
             ParseCommandLineArgs();
-            CloudTestPipeline.BuildFolder = "";
             File.Delete(CloudTestPipeline.BuildPath);
             CloudTestPipeline.SetTestRunOnCloud(true);
             Debug.Log("Creating Build for platform " + TargetPlatform);
@@ -132,6 +131,12 @@ namespace Unity.CloudTesting.Editor
                     throw new Exception($"Invalid testPlatform {testPlatformStr}, please use a valid BuildTarget");
                 }
                 TargetPlatform = testPlatform;
+            }
+
+            var outputDir = GetArgValue("outputDir");
+            if (!string.IsNullOrEmpty(outputDir))
+            {
+                CloudTestPipeline.BuildFolder = outputDir;
             }
         }
 

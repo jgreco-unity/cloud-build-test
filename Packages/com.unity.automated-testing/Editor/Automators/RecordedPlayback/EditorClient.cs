@@ -134,8 +134,6 @@ namespace Unity.CloudTesting.Editor
                     webrx.uploadHandler = new UploadHandlerRaw(Encoding.UTF8.GetBytes(payload));
                     webrx.timeout = 30;
                     webrx.SendWebRequest();
-
-                    Debug.Log($"URL: {url}, pid: {Application.cloudProjectId} t: {CloudProjectSettings.accessToken}");
                     while (!webrx.isDone)
                     {
                     }

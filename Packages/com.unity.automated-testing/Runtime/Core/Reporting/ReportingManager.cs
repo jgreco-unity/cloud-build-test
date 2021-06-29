@@ -191,7 +191,7 @@ public static class ReportingManager
             }
         }
 
-        if (!string.IsNullOrEmpty(RecordingInputModule.ScreenshotFolderPath))
+        if (!string.IsNullOrEmpty(RecordingInputModule.ScreenshotFolderPath) && Directory.Exists(RecordingInputModule.ScreenshotFolderPath))
         {
             // Copy screenshots over to report.
             foreach (var file in Directory.GetFiles(RecordingInputModule.ScreenshotFolderPath))

@@ -5,18 +5,15 @@ All notable changes to this package will be documented in this file.
 The format is based on [Keep a Changelog](http://keepachangelog.com/en/1.0.0/)
 and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.html).
 
-## Unreleased
-
+## [0.5.0] - 2021-06-24
 ### Major Features and Improvements
-- New [CloudTest] attribute can be used to specify any unit test to run on cloud
-- Automated QA > Experimental > Code Generation allows for step-by-step code generation.
-	- Currently supports regular and composite recordings generated as code.
+- Support for running tests on real iOS devices in the cloud
+- New [CloudTest] attribute can be used to specify any Unity Test Framework test to run on real devices in the cloud
+- `Automated QA > Test Generation...` allows for step-by-step Unity Test Framework test generation (C# code).
 	- Generates code for every step/action taken in a recording.
 	- Allows for assertions or additional custom logic between each step.
-	- Can still generate simple tests that only reference and run a recording.
 	- Can select which recordings to generate tests for.
 	- Editor Window warns user if about to overwrite custom edits in a recording's test when re-generating test.	
-- Adding support for recording & playback of text typed into an InputField.
 
 ### Breaking changes
 - Recording file in RecordedPlaybackAutomator is now an asset reference instead of path string

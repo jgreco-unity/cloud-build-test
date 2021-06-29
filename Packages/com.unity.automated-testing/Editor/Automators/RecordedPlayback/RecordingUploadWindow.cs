@@ -18,7 +18,7 @@ namespace Unity.CloudTesting.Editor
         private GUIStyle defaultStyle;
         private GUIStyle redStyle;
 
-        [MenuItem("Automated QA/Recording Upload...", priority=AutomatedQAEditorSettings.MenuItems.RecordingUpload)]
+    //    [MenuItem("Automated QA/Recording Upload...", priority=AutomatedQAEditorSettings.MenuItems.RecordingUpload)]
         public static void ShowWindow()
         {
             RecordingUploadWindow wnd = GetWindow<RecordingUploadWindow>();
