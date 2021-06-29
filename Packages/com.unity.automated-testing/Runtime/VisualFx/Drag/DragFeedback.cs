@@ -1,5 +1,8 @@
 using System.Collections;
+using System.Collections.Generic;
 using UnityEngine;
+using UnityEngine.EventSystems;
+using static UnityEngine.EventSystems.RecordingInputModule;
 
 public class DragFeedback : MonoBehaviour
 {
@@ -54,6 +57,14 @@ public class DragFeedback : MonoBehaviour
         }
         gameObject.transform.position = new Vector3(newPos.x, newPos.y, 0);
         yield return new WaitForEndOfFrame();
-        if (!mouseDown) Destroy(gameObject, time);
+        if (!mouseDown)
+        {
+            Destroy(gameObject, time);
+        }
+        else 
+        {
+            List<TouchData> data = Instance.GetTouchData();
+            yield return new WaitForSeconds(Instance.GetCurrentIndex() + 1 >= data.Count ? 1f : data[Instance.GetCurrentIndex()].timeDelta);
+        }
     }
 }

@@ -61,38 +61,49 @@ namespace Unity.AutomatedQA
         {
             var go = new GameObject(typeof(T).ToString());
             go.transform.SetParent(transform);
-            var a = go.AddComponent<T>();
-            automators.Add(a);
-            SubscribeEvents(a);
-            a.Init();
-            return a;
+            var automator = go.AddComponent<T>();
+            automators.Add(automator);
+            SubscribeEvents(automator);
+            automator.Init();
+            return automator;
+        }
+        
+        public T AddAutomator<T>(AutomatorConfig config) where T : Automator
+        {
+            var go = new GameObject(typeof(T).ToString());
+            go.transform.SetParent(transform);
+            var automator = go.AddComponent<T>();
+            automators.Add(automator);
+            SubscribeEvents(automator);
+            automator.Init(config);
+            return automator;
         }
         
         public Automator AddAutomator(Type AutomatorType)
         {
             var go = new GameObject(AutomatorType.ToString());
             go.transform.SetParent(transform);
-            var a = go.AddComponent(AutomatorType) as Automator;
-            automators.Add(a);
-            SubscribeEvents(a);
-            a.Init();
-            return a;
+            var automator = go.AddComponent(AutomatorType) as Automator;
+            automators.Add(automator);
+            SubscribeEvents(automator);
+            automator.Init();
+            return automator;
         }
 
         public T AddAutomator<T>(T prefab) where T : Automator
         {
-            var a = Instantiate(prefab, transform);
-            automators.Add(a);
-            SubscribeEvents(a);
-            a.Init();
-            return a;
+            var automator = Instantiate(prefab, transform);
+            automators.Add(automator);
+            SubscribeEvents(automator);
+            automator.Init();
+            return automator;
         }
 
         public Automator AddAutomator(AutomatorConfig config)
         {
-            var a = AddAutomator(config.AutomatorType);
-            a.Init(config);
-            return a;
+            var automator = AddAutomator(config.AutomatorType);
+            automator.Init(config);
+            return automator;
         }
 
         public void Reset()
@@ -108,7 +119,7 @@ namespace Unity.AutomatedQA
             automators = new List<Automator>();
             currentIndex = 0;
             initialized = false;
-            
+
             Destroy(gameObject);
             _instance = null;
         }
@@ -165,11 +176,11 @@ namespace Unity.AutomatedQA
         {
             List<T> results = new List<T>();
 
-            foreach (var a in automators)
+            foreach (var automator in automators)
             {
-                if (a is T)
+                if (automator is T)
                 {
-                    results.Add((T) a);
+                    results.Add((T) automator);
                 }
             }
 

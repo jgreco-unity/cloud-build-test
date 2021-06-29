@@ -44,6 +44,21 @@ namespace Unity.RecordedTesting
             return null;
         }
 
+
+        public static bool IsRecordedTest(string testName) 
+        {
+            foreach (var testdata in GetAllRecordedTests())
+            {
+                if (testdata.testMethod == testName)
+                {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
+        
         public static List<TestRecordingData> GetAllRecordedTests()
         {
             var results = new List<TestRecordingData>();
@@ -96,7 +111,10 @@ namespace Unity.RecordedTesting
         public static void SetupRecordedTest(string testName)
         {
             RecordedPlaybackPersistentData.SetRecordingMode(RecordingMode.Playback);
-            ReportingManager.CurrentTestName = testName;
+            if (!ReportingManager.IsTestWithoutRecordingFile && !ReportingManager.IsAutomatorTest)
+            {
+                ReportingManager.CurrentTestName = testName;
+            }
 #if !UNITY_EDITOR
             // Copy recording data from Resources
             var resourcePath = GetLocalRecordingFile(testName);
@@ -108,13 +126,16 @@ namespace Unity.RecordedTesting
                 CreateFileFromResource(Path.Combine(baseDir, segment), segment);
             }
 #else
-            // Copy recording data from asset
-            string sourcePath = Path.Combine(Application.dataPath, GetLocalRecordingFile(testName));
-            RecordedPlaybackPersistentData.SetRecordingDataFromFile(sourcePath);
+            if (!ReportingManager.IsTestWithoutRecordingFile)
+            {
+                // Copy recording data from asset
+                string sourcePath = Path.Combine(Application.dataPath, GetLocalRecordingFile(testName));
+                RecordedPlaybackPersistentData.SetRecordingDataFromFile(sourcePath);
+            }
 #endif
         }
 
-        private static string CreateFileFromResource(string resourcePath, string fileName)
+        public static string CreateFileFromResource(string resourcePath, string fileName)
         {
             var resource = Path.Combine(Path.GetDirectoryName(resourcePath), Path.GetFileNameWithoutExtension(resourcePath));
             var recording = Resources.Load<TextAsset>(resource);
@@ -140,6 +161,7 @@ namespace Unity.RecordedTesting
 
         public static IEnumerator TestPlayToEnd()
         {
+            ReportingManager.IsAutomatorTest = false;
             while (!IsPlaybackCompleted())
             {
                 yield return null;

@@ -7,6 +7,7 @@ using Unity.AutomatedQA;
 using UnityEngine.Events;
 using UnityEngine.SceneManagement;
 using UnityEngine.UI;
+using Unity.AutomatedQA.Listeners;
 
 namespace UnityEngine.EventSystems
 {
@@ -42,7 +43,7 @@ namespace UnityEngine.EventSystems
         private TouchData activeDrag;
         private string currentEntryScene;
 
-        public RecordingMode RecordingMode 
+        public RecordingMode RecordingMode
         {
             get
             {
@@ -58,6 +59,20 @@ namespace UnityEngine.EventSystems
         private HashSet<string> pendingSignals = new HashSet<string>();
 
         private HashSet<string> hierarchyWarnings = new HashSet<string>();
+
+        internal static string ScreenshotFolderPath { get; set; }
+
+        // Variables used by IsReadyForNextAction between invocations.
+        private float currentPeriodBetweenTargetReadinessChecks { get; set; }
+        private float lastActionTriggeredTime { get; set; }
+        private static readonly float targetReadinessWaitInterval = 0.5f;
+
+        // Variables used by GetTouchPosition() between invocations.
+        private TouchData targetOriginData { get; set; }
+        private GameObject targetGameObjectFound { get; set; }
+        private Vector3 targetPositionFromOffset { get; set; }
+        private bool targetIsNotOverlappedByOtherObjects { get; set; }
+        private bool targetChecked { get; set; }
 
         protected RecordingInputModule()
         {
@@ -82,13 +97,15 @@ namespace UnityEngine.EventSystems
         private void InitRecordingData()
         {
             lastEventTime = Time.time;
-            if (IsPlaybackActive())
+            ReportingManager.IsCompositeRecording = false;
+            if (IsPlaybackActive() && !ReportingManager.IsTestWithoutRecordingFile)
             {
                 _recordingData = RecordedPlaybackPersistentData.GetRecordingData<InputModuleRecordingData>();
                 RecordedPlaybackPersistentData.RecordedResolution = _recordingData.recordedResolution;
                 RecordedPlaybackPersistentData.RecordedAspectRatio = _recordingData.recordedAspectRatio;
                 touchData = _recordingData.GetAllTouchData();
                 ReportingManager.InitializeDataForNewTest();
+                ReportingManager.IsCompositeRecording = _recordingData.recordingType == InputModuleRecordingData.type.composite;
             }
             else if (_recordingMode == RecordingMode.Record)
             {
@@ -113,16 +130,13 @@ namespace UnityEngine.EventSystems
                         DestroyImmediate(temp);
                 }
             }
+
+            ReportingManager.EntryScene = SceneManager.GetActiveScene().name;
         }
 
         private void SendAnalytics()
         {
             RecordedPlaybackAnalytics.SendRecordedPlaybackEnv();
-            if (_recordingMode == RecordingMode.Playback)
-            {
-                RecordedPlaybackAnalytics.SendRecordingExecution(RecordedPlaybackPersistentData.kRecordedPlaybackFilename,
-                    SceneManager.GetActiveScene().name);
-            }
         }
 
         public void SetConfigMode(RecordingMode mode, bool persist = false)
@@ -135,6 +149,10 @@ namespace UnityEngine.EventSystems
         }
 
         private int _current_index = 0;
+        public int GetCurrentIndex()
+        {
+            return _current_index;
+        }
 
         private playbackExecutionState currentState => pendingSignals.Count > 0 ? playbackExecutionState.wait : playbackExecutionState.play;
         private float waitStartTime = 0f;
@@ -143,8 +161,12 @@ namespace UnityEngine.EventSystems
 
         protected virtual void Update()
         {
-            if (!IsPlaybackActive())
+            if (!IsPlaybackActive() || ReportingManager.IsTestWithoutRecordingFile)
             {
+                if (ReportingManager.IsTestWithoutRecordingFile)
+                {
+                    ReportingManager.CreateMonitoringService();
+                }
                 return;
             }
             ReportingManager.CreateMonitoringService();
@@ -166,14 +188,28 @@ namespace UnityEngine.EventSystems
             waitStartTime = GetElapsedTime();
         }
 
-        private void UpdatePlay()
+
+        internal float GetLastEventTime()
         {
+            return lastEventTime;
+        }
+
+        public bool UpdatePlay(int overrideStepIndex = -1)
+        {
+            //Generated tests may directly choose the step execution order.
+            if (overrideStepIndex >= 0)
+            {
+                _current_index = overrideStepIndex;
+            }
             if (_current_index >= touchData.Count || !(touchData[_current_index].timeDelta <= GetElapsedTime()))
             {
-                return;
+                return false;
             }
 
             var td = touchData[_current_index];
+            if (!IsReadyForNextAction(td))
+                return false;
+
             lastEventTime += td.timeDelta;
             if (td.eventType != TouchData.type.none)
             {
@@ -205,11 +241,116 @@ namespace UnityEngine.EventSystems
             }
 
             ++_current_index;
+            return true;
+        }
+
+        /// <summary>
+        /// Determines if the next action in list of TouchData is ready to be executed. Provides a dynamic wait period, or a hard coded wait provided by the timeDelta value of TouchData.
+        /// </summary>
+        private bool IsReadyForNextAction(TouchData td)
+        {
+            // Reset stored values used to prevent duplication of work in later "perform action" logic.
+            if (targetOriginData != td)
+            {
+                targetGameObjectFound = null;
+                targetOriginData = td;
+                targetChecked = false;
+            }
+            // Checking that a game object is completely ready for interaction is heavier than alternative wait logic. Since this is called every frame, only check every second.
+            currentPeriodBetweenTargetReadinessChecks -= Time.deltaTime;
+
+            // If TouchData is not related to a GameObject, we should ignore any readiness checs related to GameObjects.
+            bool isGameObjectTouch = td.HasObject();
+
+            // Has the next GameObject taken too long to become ready for the next interaction?
+            float tempt = Time.time;
+            if (Time.time - lastActionTriggeredTime >= (SceneManager.GetActiveScene().isLoaded ? AutomatedQARuntimeSettings.DynamicWaitTimeout : AutomatedQARuntimeSettings.DynamicLoadSceneTimeout))
+            {
+                currentPeriodBetweenTargetReadinessChecks = -targetReadinessWaitInterval;
+                lastActionTriggeredTime = Time.time;
+                return true;
+            }
+
+            // Are we in the `intervalBetweenTargetReadinessChecks` interval between readiness checks?
+            if (AutomatedQARuntimeSettings.UseDynamicWaits && currentPeriodBetweenTargetReadinessChecks > 0f)
+            {
+                return false;
+            }
+
+            // Even if we are using dynamic waits, it is possible for a GameObject to be ready instantly, resulting in actions being performed within a frame of each other. Use the timeDelta as a minimum wait time.
+            if (td.timeDelta >= GetElapsedTime())
+            {
+                return false;
+            }
+
+            // If timeDelta has been exceeded, and we are using dynamic waits, check that the target GameObject is ready.
+            if (AutomatedQARuntimeSettings.UseDynamicWaits && isGameObjectTouch)
+            {
+                if (targetGameObjectFound == null)
+                    targetGameObjectFound = FindObject(td, GetActiveGameObjects());
+
+                bool isTargetReady = false;
+                bool readySelf = targetGameObjectFound != null && targetGameObjectFound.activeSelf && targetGameObjectFound.activeInHierarchy;
+                if (readySelf)
+                {
+                    // Check that any buttons, toggles, inputs, are canvases are in a ready state.
+                    bool buttonReady = targetGameObjectFound.GetComponent<Button>() != null ? targetGameObjectFound.GetComponent<Button>().interactable : true;
+                    bool toggleReady = targetGameObjectFound.GetComponent<Toggle>() != null ? targetGameObjectFound.GetComponent<Toggle>().interactable : true;
+                    bool inputReady = targetGameObjectFound.GetComponent<InputField>() != null ? targetGameObjectFound.GetComponent<InputField>().interactable : true;
+                    CanvasGroup cg = targetGameObjectFound.GetComponent<CanvasGroup>();
+                    bool canvasReady = cg != null ? cg.interactable : true;
+
+                    /*
+                     * Objects may be visible and interactable, but in an animation (for example). This can result in other objects intercepting the clicks.
+                     * Wait until nothing would intercept our trigger. This is the least performant check, so only perform it if all other readiness checks have passed.
+                    */
+                    targetIsNotOverlappedByOtherObjects = true;
+                    if (buttonReady && toggleReady && inputReady && canvasReady && targetGameObjectFound.TryGetComponent(out RectTransform rectTransform))
+                    {
+                        // The local position within the rect transform where our click should be performed.
+                        Vector3 localPos = rectTransform.rect.min + td.objectOffset * rectTransform.rect.size + rectTransform.rect.size / 2f;
+                        Camera eventCamera = GetEventCameraForCanvasChild(targetGameObjectFound);
+                        targetPositionFromOffset = RectTransformUtility.WorldToScreenPoint(eventCamera, rectTransform.TransformPoint(localPos));
+
+                        // Determine if the click coordinates in the target GameObject would be intercepted by another GameObject that is rendered on top of it.
+                        targetIsNotOverlappedByOtherObjects = NoOverlappingObjectWillInterceptClick(targetGameObjectFound, targetPositionFromOffset, td.objectName, true);
+                        targetChecked = true;
+                    }
+
+                    isTargetReady = buttonReady && toggleReady && inputReady && canvasReady && targetIsNotOverlappedByOtherObjects;
+                }
+
+                if (!isTargetReady)
+                {
+                    currentPeriodBetweenTargetReadinessChecks = targetReadinessWaitInterval;
+                    return false;
+                }
+            }
+
+            // Reset values to ready states for next action to perform.
+            currentPeriodBetweenTargetReadinessChecks = -targetReadinessWaitInterval;
+            lastActionTriggeredTime = Time.time;
+            return true;
         }
 
         private float GetElapsedTime()
         {
             return Time.time - lastEventTime - timeAdjustment;
+        }
+
+        public List<TouchData> GetTouchData()
+        {
+            return touchData;
+        }
+
+        public void AddTouchData(TouchData data)
+        {
+            touchData.Add(data);
+        }
+
+        public void ClearTouchData()
+        {
+            touchData = new List<TouchData>();
         }
 
         void DoAction(int index)
@@ -218,7 +359,6 @@ namespace UnityEngine.EventSystems
             {
                 return;
             }
-
             var td = touchData[index];
             if (_recordingMode == RecordingMode.Playback)
             {
@@ -251,7 +391,15 @@ namespace UnityEngine.EventSystems
             //touch.radius = 0;
             //touch.radiusVariance = 0;
 
-            if (td.eventType == TouchData.type.press)
+            DebugLog(td.HasObject() && !td.positional && td.eventType != TouchData.type.drag
+                ? $"Simulating {td.eventType} on object {td.objectName}"
+                : $"Simulating {td.eventType} at screen position {td.GetScreenPosition()}");
+
+            if (td.eventType == TouchData.type.input)
+            {
+                StartCoroutine(InputText(td));
+            }
+            else if (td.eventType == TouchData.type.press)
             {
                 touch.phase = TouchPhase.Began;
                 falseTouches.Add(touch);
@@ -390,7 +538,7 @@ namespace UnityEngine.EventSystems
             return scenes;
         }
 
-        private List<string> GetHierarchy(GameObject gameObject)
+        internal List<string> GetHierarchy(GameObject gameObject)
         {
             var hierarchy = new List<string>();
             var parent = gameObject.transform.parent;
@@ -465,6 +613,16 @@ namespace UnityEngine.EventSystems
                 return td.GetScreenPosition();
             }
 
+            // If we are using dynamic waits for target readiness, then we may have already done this check and recorded the target position.
+            if (AutomatedQARuntimeSettings.UseDynamicWaits && targetOriginData == td && targetGameObjectFound != null && targetChecked)
+            {
+                if (targetIsNotOverlappedByOtherObjects)
+                {
+                    return targetPositionFromOffset;
+                }
+                ThrowGameObjectWillInterceptClickError();
+            }
+
             List<GameObject> objPool = GetActiveGameObjects();
             var target = FindObject(td, objPool);
 
@@ -474,19 +632,17 @@ namespace UnityEngine.EventSystems
                 bool hasRectTransform = target.TryGetComponent(out RectTransform rectTransform);
                 if (hasRectTransform)
                 {
-                    // Determine if an event camera is associated with the parent canvas element. Using the correct camera, or null value, is required for generating accurate click coordinates.
-                    Camera eventCamera = GetEventCameraForCanvasChild(target);
-                     
                     // The local position within the rect transform where our click should be performed.
                     Vector3 localPos = rectTransform.rect.min + td.objectOffset * rectTransform.rect.size + rectTransform.rect.size / 2f;
-                    Vector3 posFromOffset = RectTransformUtility.WorldToScreenPoint(eventCamera, rectTransform.TransformPoint(localPos));
+                    Camera eventCamera = GetEventCameraForCanvasChild(target);
+                    targetPositionFromOffset = RectTransformUtility.WorldToScreenPoint(eventCamera, rectTransform.TransformPoint(localPos));
 
                     // Is the target object rendered within the camera frustum, and thus visible on screen.
-                    ValidateObjectIsVisibleOnScreen(posFromOffset, td.objectName);
+                    ValidateObjectIsVisibleOnScreen(targetPositionFromOffset, td.objectName);
 
                     // Determine if the click coordinates in the target GameObject would be intercepted by another GameObject that is rendered on top of it.
-                    ValidateNoOverlappingObjectWillInterceptClick(target, posFromOffset, td.objectName);
-                    return posFromOffset;
+                    NoOverlappingObjectWillInterceptClick(target, targetPositionFromOffset, td.objectName);
+                    return targetPositionFromOffset;
                 }
             }
 
@@ -501,6 +657,11 @@ namespace UnityEngine.EventSystems
             return raycastResult.Value.screenPosition;
         }
 
+        /// <summary>
+        /// Determine if an event camera is associated with the parent canvas element. Using the correct camera, or null value, is required for generating accurate relative coordinates in the game world.
+        /// </summary>
+        /// <param name="gameObject"></param>
+        /// <returns></returns>
         private Camera GetEventCameraForCanvasChild(GameObject gameObject)
         {
             Camera eventCamera = null;
@@ -534,7 +695,12 @@ namespace UnityEngine.EventSystems
             }
         }
 
-        private void ValidateNoOverlappingObjectWillInterceptClick(GameObject target, Vector3 posFromOffset, string nameOfObject)
+        /// <summary>
+        /// Find any objects that will intercept the performed click. This can be used to assert that there is no intercepting object, or simply check for intercepting objects.
+        /// </summary>
+        /// <param name="isSoftCheck">If true, no asserted failure will occur when overlapping objects are found, and we will simply notify the caller.</param>
+        /// <returns></returns>
+        private bool NoOverlappingObjectWillInterceptClick(GameObject target, Vector3 posFromOffset, string nameOfObject, bool isSoftCheck = false)
         {
             List<RaycastResult> raycastResults = new List<RaycastResult>();
             EventSystem.current.RaycastAll(new PointerEventData(EventSystem.current) { position = posFromOffset }, raycastResults);
@@ -565,10 +731,52 @@ namespace UnityEngine.EventSystems
                     exceptionFound = !raycastResults.FindAll(rcr => rcr.gameObject == target).Any() && target.GetComponent<Slider>();
                     if (!isChildOfTargetGameObject && !exceptionFound)
                     {
-                        Debug.LogError($"Click position recorded relative to spot within the target GameObject \"{nameOfObject}\" would be caught by the wrong GameObject, which is overlapping the target GameObject at the click coordinates. " +
-                        $"Since this is a GameObject in the UI layer, this may mean that the object has not scaled or positioned properly in the current aspect ratio ({Screen.width}w X {Screen.height}h) and current resolution ({Screen.currentResolution.width} X {Screen.currentResolution.height}) compared to the recorded aspect ratio ({RecordedPlaybackPersistentData.RecordedAspectRatio.x}h X {RecordedPlaybackPersistentData.RecordedAspectRatio.y}w) and recorded resolution ({RecordedPlaybackPersistentData.RecordedResolution.x} X {RecordedPlaybackPersistentData.RecordedResolution.y}).");
+                        if (isSoftCheck)
+                        {
+                            return false;
+                        }
+                        ThrowGameObjectWillInterceptClickError();
                     }
                 }
+            }
+            return true;
+        }
+
+        private void ThrowGameObjectWillInterceptClickError()
+        {
+            Debug.LogError($"Click position recorded relative to spot within the target GameObject \"{targetGameObjectFound.name}\" would be caught by the wrong GameObject, which is overlapping the target GameObject at the click coordinates. " +
+                        $"Since this is a GameObject in the UI layer, this may mean that the object has not scaled or positioned properly in the current aspect ratio ({Screen.width}w X {Screen.height}h) and current resolution ({Screen.currentResolution.width} X {Screen.currentResolution.height}) compared to the recorded aspect ratio ({RecordedPlaybackPersistentData.RecordedAspectRatio.x}h X {RecordedPlaybackPersistentData.RecordedAspectRatio.y}w) and recorded resolution ({RecordedPlaybackPersistentData.RecordedResolution.x} X {RecordedPlaybackPersistentData.RecordedResolution.y}).");
+
+        }
+
+        private IEnumerator InputText(TouchData td)
+        {
+            GameObject input = FindObject(td, GetActiveGameObjects());
+            if (input == null)
+                Debug.LogError($"Input field could not be found [Name:{td.objectName}] [Hierarchy:{td.objectHierarchy}]");
+            InputField inputField = input.GetComponent<InputField>();
+            inputField.text = string.Empty;
+
+            // If an input action started quickly after the input field was clicked, a pulse action may be obscuring what we type.
+            if (VisualFxManager.ActivePulseManagers.Any())
+                VisualFxManager.ReturnVisualFxCanvas(VisualFxManager.ActivePulseManagers.Last().gameObject);
+            VisualFxManager.Instance.TriggerHighlightAroundTarget(input);
+
+            // Get the time between each letter to wait, simulating typing. Do not exceed a time that would 
+            float timeBetweenLetters = td.inputDuration / td.inputText.Length;
+            for (int i = 0; i < td.inputText.Length; i++)
+            {
+                inputField.text += td.inputText[i];
+                if (i < td.inputText.Length - 1)
+                    yield return new WaitForSeconds(timeBetweenLetters);
+            }
+        }
+
+        private void DebugLog(string msg)
+        {
+            if (AutomatedQARuntimeSettings.EnableScreenshots)
+            {
+                Debug.Log(msg);
             }
         }
 
@@ -592,20 +800,6 @@ namespace UnityEngine.EventSystems
         [SerializeField] private float m_InputActionsPerSecond = 10;
 
         [SerializeField] private float m_RepeatDelay = 0.5f;
-
-        [SerializeField] private bool m_ForceModuleActive;
-
-        /// <summary>
-        /// Force this module to be active.
-        /// </summary>
-        /// <remarks>
-        /// If there is no module active with higher priority (ordered in the inspector) this module will be forced active even if valid enabling conditions are not met.
-        /// </remarks>
-        public bool forceModuleActive
-        {
-            get { return m_ForceModuleActive; }
-            set { m_ForceModuleActive = value; }
-        }
 
         /// <summary>
         /// Number of keyboard / controller inputs allowed per second.
@@ -752,7 +946,7 @@ namespace UnityEngine.EventSystems
         public override bool IsModuleSupported()
         {
             var input1 = input;
-            return m_ForceModuleActive || input1.mousePresent || input1.touchSupported;
+            return input1.mousePresent || input1.touchSupported;
         }
 
         public override bool ShouldActivateModule()
@@ -760,7 +954,7 @@ namespace UnityEngine.EventSystems
             if (!base.ShouldActivateModule())
                 return false;
 
-            var shouldActivate = m_ForceModuleActive;
+            var shouldActivate = false;
             shouldActivate |= input.GetButtonDown(m_SubmitButton);
             shouldActivate |= input.GetButtonDown(m_CancelButton);
             shouldActivate |= !Mathf.Approximately(input.GetAxisRaw(m_HorizontalAxis), 0.0f);
@@ -1177,6 +1371,9 @@ namespace UnityEngine.EventSystems
 
         private void PressMouse(PointerEventData pointerEvent, GameObject currentOverGo)
         {
+            // Without an onFocusLeave event, we need to consider a mouse press to be the end of any ongoing text input action.
+            KeyInputHandler.FinalizeAnyTextInputInProgress();
+
             pointerEvent.eligibleForClick = true;
             pointerEvent.delta = Vector2.zero;
             pointerEvent.dragging = false;
@@ -1267,6 +1464,11 @@ namespace UnityEngine.EventSystems
             }
         }
 
+        internal void AddFullTouchData(TouchData td)
+        {
+            touchData.Add(td);
+        }
+
         private TouchData AddTouchData(PointerEventData pointerEvent, TouchData.type type, GameObject activeObject = null)
         {
             TouchData td = null;
@@ -1314,6 +1516,10 @@ namespace UnityEngine.EventSystems
                     CaptureScreenshots();
                 }
                 lastEventTime += td.timeDelta;
+
+                DebugLog(td.HasObject() && !td.positional
+                    ? $"Recording new {td.eventType} on object {td.objectName}"
+                    : $"Recording new {td.eventType} at screen position {td.GetScreenPosition()}");
                 touchData.Add(td);
             }
 
@@ -1417,10 +1623,11 @@ namespace UnityEngine.EventSystems
             // ScreenCapture.CaptureScreenshot tries to handle pushing into persistent data path for us
             // but this forces us to handle for the other cases... :(
 #if (UNITY_IOS || UNITY_ANDROID) && !UNITY_EDITOR
+            ScreenshotFolderPath = folder;
             string file = Path.Combine(folder, filename);
 #else
             string file = Path.Combine(path, filename);
-
+            ScreenshotFolderPath = path;
 #endif
 
             Directory.CreateDirectory(path);
@@ -1468,7 +1675,7 @@ namespace UnityEngine.EventSystems
         {
             if (_recordingMode == RecordingMode.Playback)
             {
-                RecordedPlaybackPersistentData.CleanRecordingData(true);
+                RecordedPlaybackPersistentData.CleanRecordingData();
             }
             else if (_recordingMode != RecordingMode.Record)
             {
@@ -1500,6 +1707,10 @@ namespace UnityEngine.EventSystems
             public string waitSignal;
             public string emitSignal;
 
+            public string keyCode;
+            public string inputText;
+            public float inputDuration;
+
             public string objectName;
             public string objectTag;
             public string objectHierarchy;
@@ -1511,7 +1722,10 @@ namespace UnityEngine.EventSystems
                 press,
                 release,
                 move,
-                drag
+                drag,
+                keydown,
+                keyup,
+                input
             }
 
             public bool HasObject()

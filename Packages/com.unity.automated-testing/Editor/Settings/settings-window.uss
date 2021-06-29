@@ -16,7 +16,7 @@
 }
 
 .error-label {
-	white-space: wrap;
+	white-space: normal;
 	margin-bottom: 10px;
 	padding: 10px;
 	background-color: rgb(100, 0, 0);
@@ -45,8 +45,8 @@
     font-size: 22px;
     padding-left: 20px;
 	margin: 20px 10px;
-	border-radius: 5;
-	border-width: 2;
+	border-radius: 5px;
+	border-width: 2px;
 	border-color: rgb(175, 175, 175);
 	align-self: stretch;
 	-unity-text-align: middle-center;

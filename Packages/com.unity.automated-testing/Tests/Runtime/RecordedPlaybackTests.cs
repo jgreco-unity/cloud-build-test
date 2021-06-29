@@ -12,8 +12,15 @@ namespace Unity.AutomatedQA.Tests
             string recordingPath = RecordedPlaybackPersistentData.GetRecordingDataFilePath();
             string configPath = RecordedPlaybackPersistentData.GetConfigFilePath();
 
-            File.Delete(recordingPath);
-            File.Delete(configPath);
+            if(File.Exists(recordingPath))
+            {
+                File.Delete(recordingPath);
+            }
+            
+            if(File.Exists(configPath))
+            {
+                File.Delete(configPath);
+            }
 
             RecordedPlaybackPersistentData.SetRecordingMode(RecordingMode.Record);
             RecordedPlaybackController.Instance.Begin();

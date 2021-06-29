@@ -1,12 +1,12 @@
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.IO;
 using System.Reflection;
 using System.Text;
 using Unity.AutomatedQA;
 using Unity.AutomatedQA.Editor;
 using Unity.CloudTesting.Editor;
-using Unity.RecordedTesting;
 using UnityEditor;
 using UnityEditor.TestTools.TestRunner.Api;
 using UnityEngine;
@@ -23,13 +23,37 @@ namespace Unity.CloudTesting.Editor
         private static readonly TestRunnerApi TestRunnerInstance = ScriptableObject.CreateInstance<TestRunnerApi>();
         public static event Action testBuildFinished;
 
-        private static string _buildPath;
+        private static string _accessToken;
 
-        public static string BuildPath
+        public static string AccessToken
         {
-            get => string.IsNullOrEmpty(_buildPath) ? Path.Combine(AutomatedQARuntimeSettings.PersistentDataPath, "TestBuild.apk") : _buildPath;
-            set => _buildPath = value;
+            get => string.IsNullOrEmpty(_accessToken) ? CloudProjectSettings.accessToken : _accessToken;
+            set => _accessToken = value;
         }
+
+        public static string BuildPath => Path.Combine(BuildFolder, BuildName);
+
+        private static string _buildFolder;
+        public static string BuildFolder
+        {
+            get => _buildFolder?? AutomatedQARuntimeSettings.PersistentDataPath;
+            set => _buildFolder = value;
+        }
+
+        public static string BuildName => $"{Application.identifier}.{BuildFileExtension}";
+
+        public static string BuildFileExtension
+        {
+            get {
+#if UNITY_IOS
+            return "ipa";
+#else
+            return "apk";
+#endif
+            }
+        }
+
+        public static string IOSBuildDir => Path.Combine(BuildFolder, Application.identifier);
 
         public static bool IsRunningOnCloud()
         {
@@ -40,16 +64,16 @@ namespace Unity.CloudTesting.Editor
         {
             AutomatedQAEditorSettings.hostPlatform = enabled ? HostPlatform.Cloud : HostPlatform.Local;
         }
-        
+
         public void Cleanup()
         {
             if (IsRunningOnCloud())
             {
                 // This shouldn't be handled here...
                 Debug.Log($"Build successfully saved at - {BuildPath}");
-                
+
                 AutomatedQAEditorSettings.ClearBuildFlags(EditorUserBuildSettings.selectedBuildTargetGroup);
-                
+
                 if (testBuildFinished != null)
                 {
                     testBuildFinished.Invoke();
@@ -85,18 +109,18 @@ namespace Unity.CloudTesting.Editor
             foreach (var assembly in assemblies)
             {
                 var types = assembly.GetTypes();
-    
+
                 foreach (var type in types)
                 {
                     var methods = type.GetTypeInfo().DeclaredMethods;
                     foreach (var method in methods)
                     {
-                        if (method.GetCustomAttributes(typeof(RecordedTestAttribute), false).Length > 0)
+                        if (method.GetCustomAttributes(typeof(CloudTestAttribute), false).Length > 0)
                         {
                             var assemblyName = assembly.GetName().Name;
                             if (!testFilterDictionary.ContainsKey(assemblyName))
                                 testFilterDictionary.Add(assemblyName, new List<string>());
-    
+
                             if (method.DeclaringType != null)
                             {
                                 var methodNamespace = method.DeclaringType.Namespace;
@@ -112,30 +136,34 @@ namespace Unity.CloudTesting.Editor
                     }
                 }
             }
-    
+
             return testFilterDictionary;
         }
-        
-        public static UploadUrlResponse GetUploadURL(string token = null)
+
+        public static UploadUrlResponse GetUploadURL()
         {
             Debug.Log("GetUploadURL");
             var projectId = Application.cloudProjectId;
             var url = $"{AutomatedQARuntimeSettings.DEVICE_TESTING_API_ENDPOINT}/v1/builds?projectId={projectId}";
 
             var jsonObject = new GetUploadURLPayload();
-            jsonObject.name = "PlayerWithTests.apk";
+#if UNITY_IOS
+            jsonObject.buildType = "IOS";
+#else
+            jsonObject.buildType = "ANDROID";
+#endif
+            jsonObject.name = BuildName;
             jsonObject.description = "";
             string data = JsonUtility.ToJson(jsonObject);
 
             byte[] payload = GetBytes(data);
             UploadHandlerRaw uH = new UploadHandlerRaw(payload);
             uH.contentType = "application/json";
-            var accessToken = token?? CloudProjectSettings.accessToken;
 
             using (var uwr = UnityWebRequest.Post(url, data))
             {
                 uwr.uploadHandler = uH;
-                uwr.SetRequestHeader("Authorization", "Bearer " + accessToken);
+                uwr.SetRequestHeader("Authorization", "Bearer " + AccessToken);
                 AsyncOperation request = uwr.SendWebRequest();
 
                 while (!request.isDone)
@@ -144,9 +172,9 @@ namespace Unity.CloudTesting.Editor
                 }
                 EditorUtility.ClearProgressBar();
 
-                if (uwr.isNetworkError || uwr.isHttpError)
+                if (uwr.IsError())
                 {
-                    Debug.LogError($"Couldn't get signed url. Error - {uwr.error}");
+                    HandleError($"Couldn't get signed url. Error - {uwr.error}");
                 }
                 else
                 {
@@ -160,20 +188,19 @@ namespace Unity.CloudTesting.Editor
             return new UploadUrlResponse();
         }
 
-        public static UploadUrlResponse UploadBuild(string token = null)
+        public static UploadUrlResponse UploadBuild()
         {
-            var uploadInfo = GetUploadURL(token);
-            UploadBuildToUrl(uploadInfo.upload_uri);
-            
+            var uploadInfo = GetUploadURL();
+            UploadBuildToUrl(uploadInfo.upload_uri, BuildPath);
+
             return uploadInfo;
         }
-        
-        public static void UploadBuildToUrl(string uploadURL)
+
+        public static void UploadBuildToUrl(string uploadURL, string buildPath)
         {
             Debug.Log($"Upload Build - uploadURL: {uploadURL}");
-            string buildpath = BuildPath;
-            Debug.Log($"buildpath: {buildpath}");
-            var payload = File.ReadAllBytes(buildpath);
+            Debug.Log($"buildpath: {buildPath}");
+            var payload = File.ReadAllBytes(buildPath);
             UploadHandlerRaw uH = new UploadHandlerRaw(payload);
 
             using (var uwr = UnityWebRequest.Put(uploadURL, payload))
@@ -187,9 +214,9 @@ namespace Unity.CloudTesting.Editor
                 }
                 EditorUtility.ClearProgressBar();
 
-                if (uwr.isNetworkError || uwr.isHttpError)
+                if (uwr.IsError())
                 {
-                    Debug.LogError($"Couldn't upload build. Error - {uwr.error}: {uwr.downloadHandler.text}");
+                    HandleError($"Couldn't upload build. Error - {uwr.error}: {uwr.downloadHandler.text}");
                 }
                 else
                 {
@@ -198,13 +225,12 @@ namespace Unity.CloudTesting.Editor
 
             }
         }
-        
-        public static JobStatusResponse RunCloudTests(string buildId, List<string> cloudTests, string token = null)
+
+        public static JobStatusResponse RunCloudTests(string buildId, List<string> cloudTests)
         {
             Debug.Log($"RunCloudTests - buildId: {buildId}");
             var projectId = Application.cloudProjectId;
             var url = $"{AutomatedQARuntimeSettings.DEVICE_TESTING_API_ENDPOINT}/v1/job/create?projectId={projectId}";
-            var accessToken = token?? CloudProjectSettings.accessToken;
 
             var jsonObject = new CloudTestPayload();
             jsonObject.buildId = buildId;
@@ -223,7 +249,7 @@ namespace Unity.CloudTesting.Editor
                 uwr.uploadHandler = uH;
                 uwr.downloadHandler = new DownloadHandlerBuffer();
                 uwr.SetRequestHeader("Content-Type", "application/json");
-                uwr.SetRequestHeader("Authorization", "Bearer " + accessToken);
+                uwr.SetRequestHeader("Authorization", "Bearer " + AccessToken);
 
                 AsyncOperation request = uwr.SendWebRequest();
 
@@ -233,9 +259,9 @@ namespace Unity.CloudTesting.Editor
                 }
                 EditorUtility.ClearProgressBar();
 
-                if (uwr.isNetworkError || uwr.isHttpError)
+                if (uwr.IsError())
                 {
-                    Debug.LogError($"Couldn't start cloud tests. Error - {uwr.error}");
+                    HandleError($"Couldn't start cloud tests. Error - {uwr.error}");
                 }
                 else
                 {
@@ -248,14 +274,13 @@ namespace Unity.CloudTesting.Editor
             return new JobStatusResponse();
         }
 
-        public static JobStatusResponse GetJobStatus(string jobId, string token = null)
+        public static JobStatusResponse GetJobStatus(string jobId)
         {
             var projectId = Application.cloudProjectId;
             var url = $"{AutomatedQARuntimeSettings.DEVICE_TESTING_API_ENDPOINT}/v1/jobs/{jobId}?projectId={projectId}";
-            var accessToken = token?? CloudProjectSettings.accessToken;
             using (var uwr = UnityWebRequest.Get(url))
             {
-                uwr.SetRequestHeader("Authorization", "Bearer " + accessToken);
+                uwr.SetRequestHeader("Authorization", "Bearer " + AccessToken);
                 AsyncOperation request = uwr.SendWebRequest();
 
                 while (!request.isDone)
@@ -264,9 +289,9 @@ namespace Unity.CloudTesting.Editor
                 }
                 EditorUtility.ClearProgressBar();
 
-                if (uwr.isNetworkError || uwr.isHttpError)
+                if (uwr.IsError())
                 {
-                    Debug.LogError($"Couldn't get job status. Error - {uwr.error}: {uwr.downloadHandler.text}");
+                    HandleError($"Couldn't get job status. Error - {uwr.error}: {uwr.downloadHandler.text}");
                     return new JobStatusResponse(jobId, "ERROR");
                 }
 
@@ -276,15 +301,14 @@ namespace Unity.CloudTesting.Editor
                 return JsonUtility.FromJson<JobStatusResponse>(response);
             }
         }
-        
-        public static TestResultsResponse GetTestResults(string jobId, string token = null)
+
+        public static TestResultsResponse GetTestResults(string jobId)
         {
             var projectId = Application.cloudProjectId;
             var url = $"{AutomatedQARuntimeSettings.DEVICE_TESTING_API_ENDPOINT}/v1/counters?jobId={jobId}&projectId={projectId}";
-            var accessToken = token?? CloudProjectSettings.accessToken;
             using (var uwr = UnityWebRequest.Get(url))
             {
-                uwr.SetRequestHeader("Authorization", "Bearer " + accessToken);
+                uwr.SetRequestHeader("Authorization", "Bearer " + AccessToken);
                 AsyncOperation request = uwr.SendWebRequest();
 
                 while (!request.isDone)
@@ -293,9 +317,9 @@ namespace Unity.CloudTesting.Editor
                 }
                 EditorUtility.ClearProgressBar();
 
-                if (uwr.isNetworkError || uwr.isHttpError)
+                if (uwr.IsError())
                 {
-                    Debug.LogError($"Couldn't get test results. Error - {uwr.error}: {uwr.downloadHandler.text}");
+                    HandleError($"Couldn't get test results. Error - {uwr.error}: {uwr.downloadHandler.text}");
                     return new TestResultsResponse();
                 }
 
@@ -316,6 +340,37 @@ namespace Unity.CloudTesting.Editor
             }
         }
 
+        public static void ArchiveIpa()
+        {
+            ProcessStartInfo psi = new ProcessStartInfo();
+            psi.FileName = "/usr/bin/xcodebuild";
+            psi.Arguments += "-project " + $"\"{IOSBuildDir}/Unity-iPhone.xcodeproj\"" +
+                             " -scheme 'Unity-iPhone' -archivePath " +
+                             $"\"{IOSBuildDir}/utf.xcarchive\" archive";
+            psi.RedirectStandardOutput = true;
+            psi.UseShellExecute = false;
+            psi.CreateNoWindow = true;
+            var proc = Process.Start(psi);
+            //TODO: Add progress bar
+            while (!proc.StandardOutput.EndOfStream)
+            {
+                Debug.Log (proc.StandardOutput.ReadLine ());
+            }
+
+            psi.Arguments = "-exportArchive -archivePath " +
+                            $"\"{IOSBuildDir}/utf.xcarchive\" -exportPath " +
+                            $"\"{BuildFolder}\" -exportOptionsPlist " +
+                            $"\"{IOSBuildDir}/Info.plist\"";
+
+
+            proc = Process.Start(psi);
+            while (!proc.StandardOutput.EndOfStream) {
+                Debug.Log (proc.StandardOutput.ReadLine ());
+            }
+            proc.WaitForExit();
+            Debug.Log($"Generated ipa file at {BuildPath}");
+        }
+
         private static string TestResultsToHTML(string jobId, TestResultsResponse data)
         {
             StringBuilder sb = new StringBuilder();
@@ -331,6 +386,7 @@ namespace Unity.CloudTesting.Editor
                     sb.Append($"<tr>");
 
                     sb.Append($"<td>{result.deviceModel}</td>");
+                    sb.Append($"<td>{result.deviceName}</td>");
                     sb.Append($"<td>{result.testName}</td>");
                     sb.Append($"<td>{c._name}</td>");
                     string passfail = c._value == 1 ? "Pass" : "Fail";
@@ -348,27 +404,43 @@ namespace Unity.CloudTesting.Editor
 
             return sb.ToString();
         }
-        
+
+        private static void HandleError(string msg)
+        {
+            if (Application.isBatchMode)
+            {
+                throw new Exception(msg);
+            }
+            Debug.LogError(msg);
+        }
+
         private static byte[] GetBytes(string str)
         {
             byte[] bytes = Encoding.UTF8.GetBytes(str);
             return bytes;
         }
-        
+
         [Serializable]
         public class UploadUrlResponse
         {
             public string id;
             public string upload_uri;
         }
-        
+
         [Serializable]
         public class CloudTestPayload
         {
             public string buildId;
             public List<string> testNames;
         }
-        
+
+        [Serializable]
+        public class BundleUpload
+        {
+            public string buildPath;
+            public string buildName;
+        }
+
         [Serializable]
         public class JobStatusResponse
         {
@@ -388,7 +460,7 @@ namespace Unity.CloudTesting.Editor
                 status = "UNKNOWN";
             }
         }
-        
+
         [Serializable]
         public class TestCounter
         {
@@ -401,13 +473,15 @@ namespace Unity.CloudTesting.Editor
         {
             public string name;
             public string description;
+            public string buildType;
         }
-        
+
         [Serializable]
         public class TestResult
         {
             public string testName;
             public string deviceModel;
+            public string deviceName;
             public TestCounter[] counters;
         }
 

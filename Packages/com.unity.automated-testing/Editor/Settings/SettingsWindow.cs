@@ -239,7 +239,6 @@ namespace Unity.RecordedPlayback.Editor
 			if (wnd.position.width > 375)
 			{
 				saveButton.AddToClassList("button");
-				saveButton.AddToClassList("button-left");
 			}
 			saveButton.clickable.clicked += () => { SaveSettings(); };
 			buttonRow.Add(saveButton);

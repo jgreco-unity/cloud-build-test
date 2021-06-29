@@ -31,6 +31,17 @@ namespace Unity.RecordedPlayback.Editor
             listView.onSelectionChanged += callback;
 #endif
         }
+
+
+        public static void WrappedRebuild(this ListView listView)
+        {
+#if UNITY_2021_2_OR_NEWER
+            listView.Rebuild();
+#else
+            listView.Refresh();
+#endif
+        }
+
     }
     
     public class CompositeRecordingsWindow: EditorWindow
@@ -106,7 +117,7 @@ namespace Unity.RecordedPlayback.Editor
         {
             // Asset path reference in uxml
             Label assetPath = rootVisualElement.Q<Label>("AssetPath");
-            assetPath.text = $"Assets/{AutomatedQARuntimeSettings.RecordingFolderPath}";
+            assetPath.text = $"{AutomatedQARuntimeSettings.RecordingFolderNameWithAssetPath}";
             assetPath.SetEnabled(false);
 
             // Button element references from ButtonHolder in uxml
@@ -221,7 +232,7 @@ namespace Unity.RecordedPlayback.Editor
             if (RecordingListView != null)
             {
                 RecordingListView.itemsSource = recordingPaths;
-                RecordingListView.Refresh();
+                RecordingListView.WrappedRebuild();
             }
             else
             {
@@ -242,7 +253,7 @@ namespace Unity.RecordedPlayback.Editor
             Action<VisualElement, int> bindItem = (e, i) =>
             {
                 var path = recordingPaths[i];
-                e.Q<Label>().text = path.Substring($"Assets/{AutomatedQARuntimeSettings.RecordingFolderPath}".Length + 1);
+                e.Q<Label>().text = path.Substring($"{AutomatedQARuntimeSettings.RecordingFolderNameWithAssetPath}".Length + 1);
                 if (!path.Contains("pending_segment_file_"))
                 {
                     e.Q<Button>("PlayRecordingButton").clickable.clicked += () => HandleRecordingRowClick("play", path);
@@ -261,7 +272,7 @@ namespace Unity.RecordedPlayback.Editor
 
             RecordingListView.SubscribeOnItemChosen(obj =>
             {
-                var selectedFileName = obj.ToString().Replace($"Assets/{AutomatedQARuntimeSettings.RecordingFolderPath}/", "");
+                var selectedFileName = obj.ToString().Replace($"{AutomatedQARuntimeSettings.RecordingFolderNameWithAssetPath}/", "");
                 UpdateRecordingsToCombine(selectedFileName);
                 SetupViews();
             });
@@ -282,7 +293,7 @@ namespace Unity.RecordedPlayback.Editor
 
                 foreach (var obj in objects)
                 {
-                    var selectedFileName = obj.ToString().Replace($"Assets/{AutomatedQARuntimeSettings.RecordingFolderPath}/", "");
+                    var selectedFileName = obj.ToString().Replace($"{AutomatedQARuntimeSettings.RecordingFolderNameWithAssetPath}/", "");
                     UpdateRecordingsToCombine(selectedFileName);
                 }
             });
@@ -372,7 +383,7 @@ namespace Unity.RecordedPlayback.Editor
         private void HandleRenameClick(string recordingFilePath, VisualElement e)
         {
             isRenaming = true;
-            var filename = recordingFilePath.Substring($"Assets/{AutomatedQARuntimeSettings.RecordingFolderPath}".Length + 1);
+            var filename = recordingFilePath.Substring($"{AutomatedQARuntimeSettings.RecordingFolderNameWithAssetPath}".Length + 1);
             fileRenames.Add(recordingFilePath, filename);
 
             var renamedFile = filename;
@@ -409,7 +420,7 @@ namespace Unity.RecordedPlayback.Editor
                     renameDialogResponse = EditorUtility.DisplayDialog(RENAME_DIALOG_TITLE, DIALOG_MSG, "OK", "CANCEL");
                     if (renameDialogResponse)
                     {
-                        currentLabel.text = Path.Combine("Assets", AutomatedQARuntimeSettings.RecordingFolderPath, fileRenames[recordingFilePath]);
+                        currentLabel.text = Path.Combine("Assets", AutomatedQARuntimeSettings.RecordingFolderName, fileRenames[recordingFilePath]);
                         currentLabel.style.display = DisplayStyle.Flex;
                         ConfirmSaveRenameFile(renamedFile, recordingFilePath);
                         rowContainer.Remove(rowContainer.Q<TextField>("RenameTextField"));
@@ -442,7 +453,7 @@ namespace Unity.RecordedPlayback.Editor
         private void ConfirmSaveRenameFile(string renamedFile, string recordingFilePath)
         {
             fileRenames[recordingFilePath] = renamedFile;
-            var renamePath = Path.Combine("Assets", AutomatedQARuntimeSettings.RecordingFolderPath, fileRenames[recordingFilePath]);
+            var renamePath = Path.Combine("Assets", AutomatedQARuntimeSettings.RecordingFolderName, fileRenames[recordingFilePath]);
             AssetDatabase.MoveAsset(recordingFilePath, renamePath);
             Debug.Log($"Renamed {recordingFilePath} to {renamePath}");
             fileRenames.Remove(recordingFilePath);
@@ -493,7 +504,7 @@ namespace Unity.RecordedPlayback.Editor
                 string filename = file.Split(Path.DirectorySeparatorChar).Last();
                 if (filename.StartsWith("recording_segment")) 
                 {
-                    segments = segments.Prepend($"Assets/{ AutomatedQARuntimeSettings.RecordingFolderPath}/pending_segment_file_{++index}.json");
+                    segments = segments.Prepend($"Assets/{ AutomatedQARuntimeSettings.RecordingFolderName}/pending_segment_file_{++index}.json");
                 }
             }
             return segments;
@@ -502,7 +513,7 @@ namespace Unity.RecordedPlayback.Editor
         private List<string> GetAllRecordingAssetPaths()
         {
             AssetDatabase.Refresh();
-            var assets = AssetDatabase.FindAssets("*", new[] {$"Assets/{AutomatedQARuntimeSettings.RecordingFolderPath}"}).ToList();
+            var assets = AssetDatabase.FindAssets("*", new[] {$"{AutomatedQARuntimeSettings.RecordingFolderNameWithAssetPath}"}).ToList();
             var results = new List<string>();           
             for (int i = 0; i < assets.Count; i++)
             {
@@ -559,7 +570,7 @@ namespace Unity.RecordedPlayback.Editor
             for (var i = 0; i < recordings.Count ; i++)
             {
                 var currRecording = recordings[i];
-                var asset = AssetDatabase.LoadMainAssetAtPath($"Assets/{AutomatedQARuntimeSettings.RecordingFolderPath}/" + currRecording);
+                var asset = AssetDatabase.LoadMainAssetAtPath($"{AutomatedQARuntimeSettings.RecordingFolderNameWithAssetPath}/" + currRecording);
                 ObjectField newCompositeField = new ObjectField()
                 {
                     objectType = typeof(TextAsset),
@@ -635,7 +646,7 @@ namespace Unity.RecordedPlayback.Editor
             {
                 string date = DateTime.Now.ToString("yyyy-MM-dd-THH-mm-ss");
                 string newFileName = $"composite-recording-{date}.json";
-                var newFilePath = Path.Combine("Assets", AutomatedQARuntimeSettings.RecordingFolderPath, newFileName);
+                var newFilePath = Path.Combine("Assets", AutomatedQARuntimeSettings.RecordingFolderName, newFileName);
                 CreateCompositeRecordingFile(newFilePath);
             }
         }
@@ -668,14 +679,14 @@ namespace Unity.RecordedPlayback.Editor
                 if (copyToPDP)
                 {
                     // Copy segment recordings to persistentDataPath
-                    var destPath = Path.Combine(AutomatedQARuntimeSettings.RecordingFolderPath, fileName);
-                    var sourcePath = Path.Combine("Assets", AutomatedQARuntimeSettings.RecordingFolderPath, fileName);
+                    var destPath = Path.Combine(AutomatedQARuntimeSettings.RecordingFolderName, fileName);
+                    var sourcePath = Path.Combine("Assets", AutomatedQARuntimeSettings.RecordingFolderName, fileName);
                     File.Copy(sourcePath, destPath, true);
                 }
 
                 if (string.IsNullOrEmpty(recordingDataInstance.entryScene))
                 {
-                    var segmentPath = Path.Combine("Assets", AutomatedQARuntimeSettings.RecordingFolderPath, fileName);
+                    var segmentPath = Path.Combine("Assets", AutomatedQARuntimeSettings.RecordingFolderName, fileName);
                     var segment = RecordingInputModule.InputModuleRecordingData.FromFile(segmentPath);
                     recordingDataInstance.entryScene = segment.entryScene;
                 }

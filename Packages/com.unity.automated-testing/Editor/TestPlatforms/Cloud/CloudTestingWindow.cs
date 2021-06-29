@@ -1,24 +1,24 @@
 using System;
 using System.Collections.Generic;
-using System.IO;
-using System.Text;
+using System.Diagnostics;
 using Unity.AutomatedQA;
 using Unity.AutomatedQA.Editor;
 using Unity.CloudTesting.Editor;
 using UnityEditor;
 using UnityEngine;
-using UnityEngine.Networking;
+using Debug = UnityEngine.Debug;
 
 namespace Unity.RecordedTesting.Editor
 {
 
     public class CloudTestingWindow : EditorWindow
     {
-        public static readonly BuildTarget[] SupportedBuildTargets = { BuildTarget.Android };
+        public static readonly BuildTarget[] SupportedBuildTargets = { BuildTarget.Android, BuildTarget.iOS };
 
         private List<string> allCloudTests = new List<string>();
         private CloudTestPipeline.JobStatusResponse jobStatus = new CloudTestPipeline.JobStatusResponse();
         private CloudTestPipeline.UploadUrlResponse uploadInfo = new CloudTestPipeline.UploadUrlResponse();
+        private CloudTestPipeline.BundleUpload _bundleUpload = new CloudTestPipeline.BundleUpload();
         private DateTime lastRefresh = DateTime.UtcNow;
 
         [MenuItem("Automated QA/Cloud Test Runner...", priority=AutomatedQAEditorSettings.MenuItems.CloudTestRunner)]
@@ -50,7 +50,8 @@ namespace Unity.RecordedTesting.Editor
             GUITestList();
             GUILayout.FlexibleSpace();
             GUIEmailUs();
-            GUIBuildButton();
+            GUIBuild();
+
             GUIRunButton();
             GUILayout.FlexibleSpace();
 
@@ -78,17 +79,20 @@ namespace Unity.RecordedTesting.Editor
             }
         }
 
-        void GUIBuildButton()
+        void GUIBuild()
         {
-            if (GUILayout.Button("Build & Upload"))
+            _bundleUpload.buildName = $"CloudBundle.{CloudTestPipeline.BuildFileExtension}";
+            if (GUILayout.Button("Build & Upload") && EditorUtility.DisplayDialog("Confirm Build", "Usage of the Unity editor will be blocked until the build process is complete.",
+                "Continue", "Cancel"))
             {
+                _bundleUpload.buildPath = CloudTestPipeline.BuildPath;
                 DoBuildAndUpload();
             }
         }
 
         void GUIRunButton()
         {
-            uploadInfo.id = EditorGUILayout.TextField("buildId", uploadInfo.id);
+            uploadInfo.id = EditorGUILayout.TextField("Build id", uploadInfo.id);
             if (GUILayout.Button("Run on Device Farm"))
             {
                 RunOnDeviceFarm(uploadInfo.id);
@@ -166,10 +170,13 @@ namespace Unity.RecordedTesting.Editor
 
         private void OnBuildFinish()
         {
+#if UNITY_IOS
+            CloudTestPipeline.ArchiveIpa();
+#endif
             CloudTestPipeline.testBuildFinished -= OnBuildFinish;
 
             uploadInfo = CloudTestPipeline.GetUploadURL();
-            CloudTestPipeline.UploadBuildToUrl(uploadInfo.upload_uri);
+            CloudTestPipeline.UploadBuildToUrl(uploadInfo.upload_uri, _bundleUpload.buildPath);
 
             // TODO Query upload status
             EditorUtility.DisplayProgressBar("Wait for upload status", "Wait for upload status", 0);

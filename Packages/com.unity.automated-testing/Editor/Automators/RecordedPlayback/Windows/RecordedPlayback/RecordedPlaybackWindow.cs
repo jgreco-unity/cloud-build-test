@@ -283,7 +283,7 @@ namespace Unity.RecordedPlayback.Editor
             
             GUILayout.FlexibleSpace();
 
-            GUILayout.Label($"Assets/{AutomatedQARuntimeSettings.RecordingFolderPath}");
+            GUILayout.Label($"{AutomatedQARuntimeSettings.RecordingFolderNameWithAssetPath}");
 
             EditorGUI.EndDisabledGroup();
 
@@ -316,12 +316,12 @@ namespace Unity.RecordedPlayback.Editor
 
         private List<string> GetAllRecordingAssetPaths()
         {
-            if (!Directory.Exists($"Assets/{AutomatedQARuntimeSettings.RecordingFolderPath}"))
+            if (!Directory.Exists($"{AutomatedQARuntimeSettings.RecordingFolderNameWithAssetPath}"))
             {
                 return new List<string>();
             }
             
-           var results = new List<string>(AssetDatabase.FindAssets("*", new[] {$"Assets/{AutomatedQARuntimeSettings.RecordingFolderPath}"}));
+           var results = new List<string>(AssetDatabase.FindAssets("*", new[] {$"{AutomatedQARuntimeSettings.RecordingFolderNameWithAssetPath}"}));
            for (int i = 0; i < results.Count; i++)
            {
                results[i] = AssetDatabase.GUIDToAssetPath(results[i]);
@@ -343,7 +343,7 @@ namespace Unity.RecordedPlayback.Editor
             }
             else
             {
-                var filename = recordingFilePath.Substring($"Assets/{AutomatedQARuntimeSettings.RecordingFolderPath}".Length + 1);
+                var filename = recordingFilePath.Substring($"{AutomatedQARuntimeSettings.RecordingFolderNameWithAssetPath}".Length + 1);
                 EditorGUILayout.LabelField(filename);
                 EditorGUILayout.BeginHorizontal(GUILayout.MaxWidth(StyleGuide.small_button_max_width));
                 GUIRecordingRenameButton(recordingFilePath);
@@ -409,7 +409,7 @@ namespace Unity.RecordedPlayback.Editor
             
             if (renameFile == recordingFilePath)
             {
-                var filename = recordingFilePath.Substring($"Assets/{AutomatedQARuntimeSettings.RecordingFolderPath}".Length + 1);
+                var filename = recordingFilePath.Substring($"{AutomatedQARuntimeSettings.RecordingFolderNameWithAssetPath}".Length + 1);
                 fileRenames.Add(recordingFilePath, filename);
             }
 
@@ -437,7 +437,7 @@ namespace Unity.RecordedPlayback.Editor
             if (GUILayout.Button(saveButton))
             {
                 GUI.FocusControl(null);
-                var renamePath = Path.Combine("Assets", AutomatedQARuntimeSettings.RecordingFolderPath, fileRenames[recordingFilePath]);
+                var renamePath = Path.Combine("Assets", AutomatedQARuntimeSettings.RecordingFolderName, fileRenames[recordingFilePath]);
                 AssetDatabase.MoveAsset(recordingFilePath, renamePath);
                 Debug.Log($"Renamed {recordingFilePath} to {renamePath}");
                 fileRenames.Remove(recordingFilePath);

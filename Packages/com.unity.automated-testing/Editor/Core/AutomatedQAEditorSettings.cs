@@ -1,8 +1,10 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Reflection;
 using UnityEditor;
-using UnityEditor.SettingsManagement;
+using UnityEngine;
+using Unity.RecordedPlayback.Editor;
 
 namespace Unity.AutomatedQA.Editor
 {
@@ -10,18 +12,6 @@ namespace Unity.AutomatedQA.Editor
     {
         internal const string k_PackageName = "com.unity.automated-testing";
         
-        private static Settings s_Instance;
-        internal static Settings instance
-        {
-            get
-            {
-                if (s_Instance == null)
-                    s_Instance = new Settings(k_PackageName);
-
-                return s_Instance;
-            }
-        }
-
         public static class MenuItems
         {
             public const int RecordedPlayback = 100;
@@ -31,24 +21,84 @@ namespace Unity.AutomatedQA.Editor
             
             public const int CreateAutomatedRun = 200;
             public const int CompositeRecordings = 201;
+            public const int CodeGeneration = 201;
         }
+        
+        [Serializable]
+        internal class SettingsData
+        {
+            [SerializeField]
+            internal BuildType _buildType =  BuildType.UnityTestRunner;
+            [SerializeField]
+            internal HostPlatform _hostPlatform =  HostPlatform.Local;
+            [SerializeField]
+            internal RecordingFileStorage _recordingFileStorage = RecordingFileStorage.Local;
+            
+            internal SettingsData()
+            {
+               Load();
+            }
+
+            internal string GetFilePath()
+            {
+                return Path.Combine(Application.dataPath, "AutomatedQA/EditorSettings.json");
+            }
+            
+            internal void Load()
+            {
+                if(!File.Exists(GetFilePath()))
+                {
+                    Save();
+                }
+
+                string json = File.ReadAllText(GetFilePath());
+                JsonUtility.FromJsonOverwrite(json, this);
+            }
+
+            internal void Save()
+            {
+                var destDir = Path.GetDirectoryName(GetFilePath());
+                if (!Directory.Exists(destDir))
+                {
+                    Directory.CreateDirectory(destDir);
+                }
+                
+                string json = JsonUtility.ToJson(this);
+                File.WriteAllText(GetFilePath(), json);
+                AssetDatabase.SaveAssets();
+                AssetDatabase.Refresh();
+            }
+        }
+        private static SettingsData settingsData = new SettingsData();
 
         public static BuildType buildType
         {
-            get => instance.Get<BuildType>("buildType", SettingsScope.Project, BuildType.UnityTestRunner);
-            set => instance.Set<BuildType>("buildType", value, SettingsScope.Project);
+            get => settingsData._buildType;
+            set
+            {
+                settingsData._buildType = value;
+                settingsData.Save();
+            }
         }
-        
+
         public static HostPlatform hostPlatform
         {
-            get => instance.Get<HostPlatform>("hostPlatform", SettingsScope.Project, HostPlatform.Local);
-            set => instance.Set<HostPlatform>("hostPlatform", value, SettingsScope.Project);
+            get => settingsData._hostPlatform;
+            set
+            {
+                settingsData._hostPlatform = value;
+                settingsData.Save();
+            }
         }
         
         public static RecordingFileStorage recordingFileStorage
         {
-            get => instance.Get<RecordingFileStorage>("recordingFileStorage", SettingsScope.Project, RecordingFileStorage.Local);
-            set => instance.Set<RecordingFileStorage>("recordingFileStorage", value, SettingsScope.Project);
+            get => settingsData._recordingFileStorage;
+            set
+            {
+                settingsData._recordingFileStorage = value;
+                settingsData.Save();
+            }
         }
         
         private static string GetBuildFlag(this Enum value)
@@ -85,7 +135,6 @@ namespace Unity.AutomatedQA.Editor
             return results;
         }
 
-        
         public static void ClearBuildFlags(BuildTargetGroup targetGroup)
         {
             var allFlags = GetAllBuildFlags();
@@ -96,7 +145,9 @@ namespace Unity.AutomatedQA.Editor
                 allDefined.Remove(f);
             }
            
-            PlayerSettings.SetScriptingDefineSymbolsForGroup (targetGroup,string.Join (";", allDefined.ToArray()));
+            PlayerSettings.SetScriptingDefineSymbolsForGroup (
+                EditorUserBuildSettings.selectedBuildTargetGroup,
+                string.Join (";", allDefined.ToArray()));
         }
 
         public static void ApplyBuildFlags(BuildTargetGroup targetGroup)
@@ -110,7 +161,9 @@ namespace Unity.AutomatedQA.Editor
             allDefines.Add(hostPlatform.GetBuildFlag());
             allDefines.Add(recordingFileStorage.GetBuildFlag());
 
-            PlayerSettings.SetScriptingDefineSymbolsForGroup (targetGroup, string.Join (";", allDefines.ToArray()));
+            PlayerSettings.SetScriptingDefineSymbolsForGroup (
+                EditorUserBuildSettings.selectedBuildTargetGroup,
+                string.Join (";", allDefines.ToArray()));
         }
     }
 }

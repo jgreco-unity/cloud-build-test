@@ -5,6 +5,27 @@ All notable changes to this package will be documented in this file.
 The format is based on [Keep a Changelog](http://keepachangelog.com/en/1.0.0/)
 and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.html).
 
+## Unreleased
+
+### Major Features and Improvements
+- New [CloudTest] attribute can be used to specify any unit test to run on cloud
+- Automated QA > Experimental > Code Generation allows for step-by-step code generation.
+	- Currently supports regular and composite recordings generated as code.
+	- Generates code for every step/action taken in a recording.
+	- Allows for assertions or additional custom logic between each step.
+	- Can still generate simple tests that only reference and run a recording.
+	- Can select which recordings to generate tests for.
+	- Editor Window warns user if about to overwrite custom edits in a recording's test when re-generating test.	
+- Adding support for recording & playback of text typed into an InputField.
+
+### Breaking changes
+- Recording file in RecordedPlaybackAutomator is now an asset reference instead of path string
+  - Migration: Update the file path in AutomatedRuns using RecordedPlaybackAutomator
+
+### Bug Fixes and Minor Changes
+- Added dynamic wait logic so that differences in load times or animations does not result in automation failing to interact with the target object.
+- Delayed loading of the recorded playback controller to avoid issues with initializing too early.
+
 ## [0.4.0] - 2021-06-02
 
 ### Major Features and Improvements

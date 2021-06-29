@@ -8,6 +8,7 @@ using UnityEngine.SceneManagement;
 using Unity.RecordedTesting;
 using System.IO;
 using UnityEngine.EventSystems;
+using System.Web;
 
 public static class ReportingManager
 {
@@ -28,58 +29,83 @@ public static class ReportingManager
             return "report";
         }
     }
+
+    // Serialize CurrentTestName to store name of automated run, which is set before playmode changes.
+    [SerializeField]
+    public static string CurrentTestName;
+
     public static GameObject ReportingMonitor { get; set; }
-    public static string CurrentTestName { get; set; }
     public static TestRunData ReportData { get; set; }
+    public static bool IsAutomatorTest { get; set; }
+    public static bool IsTestWithoutRecordingFile { get; set; }
+    public static bool IsCompositeRecording { get; set; }
+    public static string EntryScene { get; set; }
     private static bool Initialized { get; set; }
     private static bool Finalized { get; set; }
-    private static List<Log> AllLogs { get; set; }
     private static string _reportSaveDirectory { get; set; }
 
+    [Serializable]
     public class TestRunData
     {
-        public bool IsLocalRun { get; set; }
-        public DateTime RunStartTime { get; set; }
-        public DateTime RunFinishtTime { get; set; }
-        public string Resolution { get; set; }
-        public string AspectRatio { get; set; }
-        public string Udid { get; set; }
-        public string DeviceType { get; set; }
-        public string DeviceModel { get; set; }
-        public List<TestData> Tests = new List<TestData>();
+        public TestRunData()
+        {
+            Tests = new List<TestData>();
+        }
+        public List<Log> AllLogs;
+        public bool IsLocalRun;
+        public string RunStartTime;
+        public string RunFinishtTime;
+        public string RunTime;
+        public string Resolution;
+        public string AspectRatio;
+        public string Udid;
+        public string DeviceType;
+        public string DeviceModel;
+        public List<TestData> Tests;
     }
 
+    [Serializable]
     public class TestData
     {
-        public bool InProgress { get; set; }
-        public string TestName { get; set; }
-        public string RecordingName { get; set; }
-        public DateTime TimestampUtc { get; set; }
-        public float StartTime { get; set; }
-        public float EndTime { get; set; }
-        public TestStatus Status = TestStatus.NotRun;
-        public List<StepData> Steps = new List<StepData>();
+        public TestData() {
+            Status = TestStatus.NotRun.ToString();
+            Steps = new List<StepData>();
+        }
+        public bool InProgress;
+        public string TestName;
+        public string RecordingName;
+        public string TimestampUtc;
+        public float StartTime;
+        public float EndTime;
+        public string Status;
+        public List<StepData> Steps;
     }
 
+    [Serializable]
     public class StepData
     {
+        public StepData() {
+            Status = TestStatus.NotRun.ToString();
+            Logs = new List<Log>();
+        }
         public enum ConsoleLogType { Error, Warning, Log }
-        public string Name { get; set; }
-        public string ActionType { get; set; }
-        public string Hierarchy { get; set; }
-        public string Scene { get; set; }
-        public string Coordinates { get; set; }
-        public string ScreenshotBefore { get; set; }
-        public string ScreenshotAfter { get; set; }
-        public TestStatus Status = TestStatus.NotRun;
-        public List<Log> Logs = new List<Log>();
+        public string Name;
+        public string ActionType;
+        public string Hierarchy;
+        public string Scene;
+        public string Coordinates;
+        public string ScreenshotBefore;
+        public string ScreenshotAfter;
+        public string Status;
+        public List<Log> Logs;
     }
 
+    [Serializable]
     public struct Log
     {
         public string Message;
         public string StackTrace;
-        public LogType Type;
+        public string Type;
         public int CountInARow;
     }
 
@@ -118,21 +144,25 @@ public static class ReportingManager
     {
         if (Initialized) return;
         Initialized = true;
-        AllLogs = new List<Log>();
-
         ReportData = new TestRunData();
 #if UNITY_EDITOR
         ReportData.IsLocalRun = true;
 #else
         ReportData.IsLocalRun = false;
 #endif
-        ReportData.RunStartTime = DateTime.UtcNow;
+        ReportData.AllLogs = new List<Log>();
+        ReportData.RunStartTime = DateTime.UtcNow.ToString();
         ReportData.DeviceType = SystemInfo.deviceType.ToString();
         ReportData.DeviceModel = SystemInfo.deviceModel;
         ReportData.Udid = SystemInfo.deviceUniqueIdentifier;
 
         Application.logMessageReceived -= RecordLog; // Detach if already attached.
         Application.logMessageReceived += RecordLog; // Attach handler to recieve incoming logs.
+
+        if(Directory.Exists(ReportSaveDirectory))
+            Directory.Delete(ReportSaveDirectory, true);
+        Directory.CreateDirectory(ReportSaveDirectory);
+        Directory.CreateDirectory(Path.Combine(ReportSaveDirectory, "screenshots"));
     }
 
     /// <summary>
@@ -146,26 +176,38 @@ public static class ReportingManager
             FinalizeTestData();
         }
         Finalized = true;
-        ReportData.RunFinishtTime = DateTime.UtcNow;
+        ReportData.RunFinishtTime = DateTime.UtcNow.ToString();
+        ReportData.RunTime = Time.time.ToString();
         ReportData.AspectRatio = $"Width [{RecordedPlaybackPersistentData.RecordedAspectRatio.x}] by Height [{RecordedPlaybackPersistentData.RecordedAspectRatio.y}]";
         ReportData.Resolution = $"{RecordedPlaybackPersistentData.RecordedResolution.x} x {RecordedPlaybackPersistentData.RecordedResolution.y}";
 
         // If any tests ran without executing steps, something went wrong. Empty tests should not be considered a successful test.
-        List<TestData> testsWithoutSteps = ReportData.Tests.FindAll(x => x.Status == TestStatus.Pass && !x.Steps.Any());
+        List<TestData> testsWithoutSteps = ReportData.Tests.FindAll(x => x.Status == TestStatus.Pass.ToString() && !x.Steps.Any());
         if (testsWithoutSteps.Any())
         {
             foreach (TestData test in testsWithoutSteps)
             {
-                test.Status = TestStatus.Fail;
+                test.Status = TestStatus.Fail.ToString();
             }
         }
 
-        if (Directory.Exists(ReportSaveDirectory))
+        if (!string.IsNullOrEmpty(RecordingInputModule.ScreenshotFolderPath))
         {
-            Directory.Delete(ReportSaveDirectory, true);
+            // Copy screenshots over to report.
+            foreach (var file in Directory.GetFiles(RecordingInputModule.ScreenshotFolderPath))
+                File.Copy(file, Path.Combine(ReportSaveDirectory, "screenshots", new FileInfo(file).Name));
         }
-        Directory.CreateDirectory(ReportSaveDirectory);
-        Directory.CreateDirectory(Path.Combine(ReportSaveDirectory, "screenshots"));
+
+        // Clean up temp screenshot directory.
+        string[] folders = Directory.GetDirectories(AutomatedQARuntimeSettings.PersistentDataPath);
+        foreach (string folder in folders)
+        {
+            string foldername = folder.Split(Path.DirectorySeparatorChar).Last();
+            if (foldername.Contains("screenshots"))
+            {
+                Directory.Delete(folder, true);
+            }
+        }
 
         GenerateXmlReport();
         GenerateHtmlReport();
@@ -180,13 +222,26 @@ public static class ReportingManager
         {
             InitializeReport();
         }
+
+        // Test was already initialized. Most likely due to errors or logs requiring test data initialization before it would normally be invoked.
+        bool isCurrentTestAlreadyInitialized = ReportData.Tests.Any() && ReportData.Tests.FindAll(x => x.TestName == CurrentTestName).Any();
+        // If this is a full generated test, this method will be invoked when empty scenes are loaded between Unity Test Runner test execution. Ignore when that happens.
+        bool isCurrentGameStateReadyForInitialization = IsTestWithoutRecordingFile &&
+            (string.IsNullOrEmpty(CurrentTestName) || SceneManager.GetActiveScene().name.ToLower().Contains("emptyscene"));
+        if (isCurrentTestAlreadyInitialized || isCurrentGameStateReadyForInitialization)
+            return;
+
         if (ReportData.Tests.Any() && ReportData.Tests.Last().InProgress)
         {
             FinalizeTestData();
         }
         TestData recording = new TestData();
         recording.TestName = CurrentTestName;
-        if (AutomatedQARuntimeSettings.hostPlatform != HostPlatform.Cloud)
+
+        // Check if the current test is expected to have a json recording file.
+        if (!IsTestWithoutRecordingFile && AutomatedQARuntimeSettings.hostPlatform != HostPlatform.Cloud &&
+            // CurrentTestName is null/empty if a recording was launched from AutomatedQa editor windows.
+            (string.IsNullOrEmpty(CurrentTestName) ? true : RecordedTesting.IsRecordedTest(recording.TestName)))
         {
             recording.RecordingName = string.IsNullOrEmpty(RecordedPlaybackPersistentData.RecordingFileName) ?
                 RecordedTesting.GetLocalRecordingFile(recording.TestName) :
@@ -194,8 +249,13 @@ public static class ReportingManager
         }
         recording.RecordingName = string.IsNullOrEmpty(recording.RecordingName) ? "" : recording.RecordingName.Split('/').Last().Replace(".json", string.Empty);
         recording.StartTime = Time.time;
-        recording.TimestampUtc = DateTime.UtcNow;
+        recording.TimestampUtc = DateTime.UtcNow.ToString();
         recording.InProgress = true;
+        StepData step = new StepData();
+        step.Name = "Test Initialization";
+        step.Scene = SceneManager.GetActiveScene().name;
+        step.ActionType = "setup";
+        recording.Steps.Add(step);
         ReportData.Tests.Add(recording);
     }
 
@@ -206,13 +266,21 @@ public static class ReportingManager
     {
         if (ReportData == null || !ReportData.Tests.Any()) return;
         TestData currentRecording = ReportData.Tests.Last();
-        if (currentRecording.Status == TestStatus.NotRun)
-            currentRecording.Status = TestStatus.Pass; // A pass is determined by whether an exception prevented completion of a step.
-        if (currentRecording.Steps.Any() && currentRecording.Steps.Last().Status == TestStatus.NotRun)
-            currentRecording.Steps.Last().Status = TestStatus.Pass;
+        if (currentRecording.Status == TestStatus.NotRun.ToString())
+            currentRecording.Status = TestStatus.Pass.ToString(); // A pass is determined by whether an exception prevented completion of a step.
+        if (currentRecording.Steps.Any() && currentRecording.Steps.Last().Status == TestStatus.NotRun.ToString())
+            currentRecording.Steps.Last().Status = TestStatus.Pass.ToString();
         if (!currentRecording.InProgress) return;
         currentRecording.EndTime = Time.time;
         currentRecording.InProgress = false;
+
+        RecordedPlaybackAnalytics.SendRecordingExecution(
+            RecordedPlaybackPersistentData.kRecordedPlaybackFilename,
+            EntryScene,
+            currentRecording.Status == TestStatus.Pass.ToString(),
+            (int) (currentRecording.EndTime - currentRecording.StartTime)
+        );
+        IsAutomatorTest = false;
     }
 
     /// <summary>
@@ -221,6 +289,8 @@ public static class ReportingManager
     /// <param name="step"></param>
     public static void AddStep(StepData step)
     {
+        if (!ReportData.Tests.Any())
+            return;
         // If this is the continuation of a drag, only record the drag start and next drag release.
         if (ReportData.Tests.Last().Steps.Any()
             && ReportData.Tests.Last().Steps.Last().ActionType.ToLowerInvariant() == "drag"
@@ -228,8 +298,8 @@ public static class ReportingManager
             return;
 
         if (ReportData.Tests.Last().Steps.Any() &&
-            ReportData.Tests.Last().Steps.Last().Status == TestStatus.NotRun)
-            ReportData.Tests.Last().Steps.Last().Status = TestStatus.Pass; // A pass is determined by whether a logged error or exception prevented completion of a step.
+            ReportData.Tests.Last().Steps.Last().Status == TestStatus.NotRun.ToString())
+            ReportData.Tests.Last().Steps.Last().Status = TestStatus.Pass.ToString(); // A pass is determined by whether a logged error or exception prevented completion of a step.
 
         step.Scene = SceneManager.GetActiveScene().name;
         ReportData.Tests.Last().Steps.Add(step);
@@ -253,13 +323,14 @@ public static class ReportingManager
     public static void AddScreenshot(string screenshotPath)
     {
         StepData step = ReportData.Tests.Last().Steps.Last();
+        string relativePath = $"screenshots/{screenshotPath.Split(new string[] { "/", "\\" }, StringSplitOptions.None).Last()}";
         if (string.IsNullOrEmpty(step.ScreenshotBefore))
         {
-            step.ScreenshotBefore = screenshotPath;
+            step.ScreenshotBefore = relativePath;
         }
         else
         {
-            step.ScreenshotAfter = screenshotPath;
+            step.ScreenshotAfter = relativePath;
         }
     }
 
@@ -268,44 +339,65 @@ public static class ReportingManager
     /// </summary>
     public static void RecordLog(string message, string stackTrace, LogType type)
     {
-        if (!ReportData.Tests.Any() || !ReportData.Tests.Last().Steps.Any()) return;
+        message = EncodeCharactersForJson(message);
+        bool anyTestsSet = ReportData.Tests.Any();
+        bool anyStepsSet = anyTestsSet && ReportData.Tests.Last().Steps.Any();
+        bool isCurrentTestNameSet = !string.IsNullOrEmpty(CurrentTestName);
+
+        // An log is outside the context of the test run itself, and won't be tracked unless it is an exception that can affect the test run/
+        if ((!anyTestsSet || !anyStepsSet) && (!isCurrentTestNameSet || type != LogType.Exception)) return;
+
+        if (!anyTestsSet && !anyStepsSet && isCurrentTestNameSet)
+        {
+            InitializeDataForNewTest();
+        }
 
         // If the newest log is identical to the last log, increment the last log. Otherwise record as a new log.
         Log lastLogStep = ReportData.Tests.Last().Steps.Last().Logs.Any() ? ReportData.Tests.Last().Steps.Last().Logs.Last() : new Log();
-        Log lastLogAll = AllLogs.Any() ? AllLogs.Last() : new Log();
-        if (lastLogAll.Message == message && lastLogAll.Type == type && lastLogStep.Message == message && lastLogStep.Type == type)
+        Log lastLogAll = ReportData.AllLogs.Any() ? ReportData.AllLogs.Last() : new Log();
+        bool incrementingLastAllLog = false;
+        bool incrementingLastStepLog = false;
+        if (lastLogAll.Message == message && lastLogAll.Type == type.ToString()) 
         {
+            incrementingLastAllLog = true;
             lastLogAll.CountInARow++;
-            lastLogStep.CountInARow++;
-            return;
+            ReportData.AllLogs[ReportData.AllLogs.Count - 1] = lastLogAll;
         }
-        else
+        if (lastLogStep.Message == message && lastLogStep.Type == type.ToString())
         {
-            Log newLog = new Log()
-            {
-                Message = message,
-                StackTrace = type == LogType.Exception ? stackTrace : string.Empty,
-                Type = type,
-            };
-            ReportData.Tests.Last().Steps.Last().Logs.Add(newLog);
-            AllLogs.Add(newLog);
+            incrementingLastStepLog = true;
+            lastLogStep.CountInARow++;
+            ReportData.Tests.Last().Steps.Last().Logs[ReportData.Tests.Last().Steps.Last().Logs.Count - 1] = lastLogStep;
         }
+
+        Log newLog = new Log()
+        {
+            Message = message,
+            StackTrace = type == LogType.Exception ? stackTrace : string.Empty,
+            Type = type.ToString(),
+        };
+        if(!incrementingLastAllLog)
+            ReportData.AllLogs.Add(newLog);
+        if (!incrementingLastStepLog)
+            ReportData.Tests.Last().Steps.Last().Logs.Add(newLog);
+
         // Report test failure if an exception occurred, or an error was logged.
         if (type == LogType.Exception || type == LogType.Error)
         {
             TestData currentTest = ReportData.Tests.Last();
             StepData currentStep = currentTest.Steps.Last();
-            currentTest.Status = currentStep.Status = TestStatus.Fail;
-            RecordingInputModule.Instance.CaptureScreenshots(); // Errors may prevent normal screen capture logic from being hit.
+            currentTest.Status = currentStep.Status = TestStatus.Fail.ToString();
+            if(RecordingInputModule.Instance != null)
+                RecordingInputModule.Instance.CaptureScreenshots(); // Errors may prevent normal screen capture logic from being hit.
         }
         // Report warning status on associated step.
         else if (type == LogType.Warning)
         {
             TestData currentTest = ReportData.Tests.Last();
             StepData currentStep = currentTest.Steps.Last();
-            currentStep.Status = TestStatus.Warning;
-            if (currentTest.Status != TestStatus.Fail)
-                currentTest.Status = TestStatus.Warning;
+            currentStep.Status = TestStatus.Warning.ToString();
+            if (currentTest.Status != TestStatus.Fail.ToString())
+                currentTest.Status = TestStatus.Warning.ToString();
         }
     }
 
@@ -314,24 +406,24 @@ public static class ReportingManager
         StringBuilder xmlReport = new StringBuilder();
         xmlReport.AppendLine("<?xml version=\"1.0\" encoding=\"UTF-8\"?>");
         xmlReport.AppendLine("<testsuites>");
-        int failCount = ReportData.Tests.FindAll(x => x.Status == TestStatus.Fail).Count;
-        xmlReport.AppendLine($"<testsuite failures=\"{failCount}\" tests=\"{ReportData.Tests.Count}\" errors=\"{failCount}\" name=\"Automation-Tests\" skipped=\"{ReportData.Tests.FindAll(x => x.Status == TestStatus.NotRun).Count}\" time=\"{Math.Abs(ReportData.RunStartTime.Subtract(ReportData.RunFinishtTime).TotalSeconds)}\">");
+        int failCount = ReportData.Tests.FindAll(x => x.Status == TestStatus.Fail.ToString()).Count;
+        xmlReport.AppendLine($"<testsuite failures=\"{failCount}\" tests=\"{ReportData.Tests.Count}\" errors=\"{failCount}\" name=\"Automation-Tests\" skipped=\"{ReportData.Tests.FindAll(x => x.Status == TestStatus.NotRun.ToString()).Count}\" time=\"{Time.time}\">");
         foreach (TestData test in ReportData.Tests)
         {
             // Extrapolate test results into xml nodes to append to the test run's xml report.
             string[] namePieces = string.IsNullOrEmpty(test.TestName) ? new string[] { } : test.TestName.Split('.');
             string className = string.IsNullOrEmpty(test.TestName) ? "NotACompiledTest" : (namePieces.Length > 1 ? namePieces[namePieces.Length - 2] : "CouldNotFindClassName");
             string testName = string.IsNullOrEmpty(test.TestName) ? test.RecordingName : namePieces[namePieces.Length - 1];
-            if (test.Status == TestStatus.Fail || test.Status == TestStatus.Warning)
+            if (test.Status == TestStatus.Fail.ToString() || test.Status == TestStatus.Warning.ToString())
             {
                 xmlReport.AppendLine($"<testcase classname=\"{className}\" name=\"{testName}\" time=\"{test.EndTime - test.StartTime}\">");
                 xmlReport.AppendLine("<failure message=\"Failed. View HTML report for details.\" type=\"Test Failure\"></failure></testcase>");
             }
-            else if (test.Status == TestStatus.Pass)
+            else if (test.Status == TestStatus.Pass.ToString())
             {
                 xmlReport.AppendLine($"<testcase classname=\"{className}\" name=\"{testName}\" time=\"{test.EndTime - test.StartTime}\"></testcase>");
             }
-            else if (test.Status == TestStatus.NotRun)
+            else if (test.Status == TestStatus.NotRun.ToString())
             {
                 xmlReport.AppendLine($"<testcase classname=\"{className}\" name=\"{testName}\" time=\"{test.EndTime - test.StartTime}\">");
                 xmlReport.AppendLine("<skipped message=\"Skipped. View HTML report for details.\" type=\"Inconclusive\"></skipped></testcase>");
@@ -345,162 +437,9 @@ public static class ReportingManager
     public static void GenerateHtmlReport()
     {
         StringBuilder report = new StringBuilder();
-        report.AppendLine("<head>");
-        report.AppendLine(TestRunReportHtmlManiest.REQUIRED_EXTERNAL_SCRIPTS);
-        report.AppendLine(TestRunReportHtmlManiest.CHART_SCRIPT);
-        report.AppendLine(TestRunReportHtmlManiest.REPORT_SCRIPTS);
-        report.AppendLine(TestRunReportHtmlManiest.REPORT_STYLES);
-        report.AppendLine("</head>");
-        report.AppendLine("<body>");
-
-        report.AppendLine(TestRunReportHtmlManiest.MODAL_POPUP);
-        report.AppendLine(TestRunReportHtmlManiest.UNIT_LOGO_HEADER);
-        report.AppendLine($@"
-	        <div class='header-region'>
-		        <h1  class='header-title'>{(ReportData.IsLocalRun ? "Local" : "Cloud/CI")} Test Run Report</h1>
-	        </div>
-        ");
-
-        report.AppendLine("<div class='status-summary-region'>");
-        report.AppendLine($@"
-	        <div class='test-run-data-region'>
-			    <div class='test-run-data'><div class='data-label'>Time Started UTC:</div><div class='data-value'>{ReportData.RunStartTime}</div></div>
-			    <div class='test-run-data'><div class='data-label'>Total Run Time:</div><div class='data-value'>{Math.Round(Math.Abs(ReportData.RunStartTime.Subtract(ReportData.RunFinishtTime).TotalSeconds), 0)} (s)</div></div>
-			    <div class='test-run-data'><div class='data-label'>Device Type:</div><div class='data-value'>{ReportData.DeviceType}</div></div>
-			    <div class='test-run-data'><div class='data-label'>Device Model:</div><div class='data-value'>{ReportData.DeviceModel}</div></div>
-			    <div class='test-run-data'><div class='data-label'>Device UDID:</div><div class='data-value'>{ReportData.Udid}</div></div>
-			    <div class='test-run-data'><div class='data-label'>Aspect Ratio:</div><div class='data-value'>{ReportData.AspectRatio}</div></div>
-			    <div class='test-run-data'><div class='data-label'>Resolution:</div><div class='data-value'>{ReportData.Resolution}</div></div>
-		    </div>
-        ");
-        report.AppendLine(TestRunReportHtmlManiest.PIECHART_AND_TOOLTIP);
-        report.AppendLine("<div class='piechart-messages'>");
-        foreach (Log log in AllLogs)
-        {
-            string logClass = string.Empty;
-            switch (log.Type)
-            {
-                case LogType.Error:
-                case LogType.Exception:
-                    logClass = "error";
-                    break;
-                case LogType.Warning:
-                    logClass = "warning";
-                    break;
-                case LogType.Log:
-                    logClass = "log";
-                    break;
-            }
-            report.AppendLine($"<div class='console-log piechart-{logClass}{(log.StackTrace.Length > 0 ? " has-stacktrace" : string.Empty)}' onclick='ShowStackTrace(this);'><strong>&nbsp;<span class='char {GetLogTypeClass(log.Type)}'>{GetLogTypeIndicator(log.Type)}</span>&nbsp;{(log.CountInARow > 0 ? $"[{log.CountInARow + 1}]" : string.Empty)}</strong>&nbsp;{log.Message}<input type='hidden' class='console-log-stacktrace' value='{log.StackTrace}'/></div>");
-        }
-        report.AppendLine($"<input class='pie-chart-data' type='hidden' value ='Status|Count," +
-            $"Pass|{ReportData.Tests.FindAll(x => x.Status == TestStatus.Pass).Count}," +
-            $"Warning|{ReportData.Tests.FindAll(x => x.Status == TestStatus.Warning).Count}," +
-            $"Fail|{ReportData.Tests.FindAll(x => x.Status == TestStatus.Fail).Count}," +
-            $"Not Run|{ReportData.Tests.FindAll(x => x.Status == TestStatus.NotRun).Count}'/>");
-        report.AppendLine("</div>"); // End .piechart-messages
-        report.AppendLine("</div>"); // End .status-summary-region
-
-        report.AppendLine("<div class='recordings-container'>");
-        foreach (TestData test in ReportData.Tests)
-        {
-            char statusIndicator = GetStatusIndicator(test.Status);
-            // The toggle element that represents a single test/recording. Clicking it expands to show individual steps.
-            report.AppendLine($@"
-                <div class='recording-toggle' onclick='ToggleDetails(this);'>
-                    <div class='status-indicator {GetStatusClass(test.Status)}'>
-                        <div>{statusIndicator}</div>
-                    </div>
-                    <div class='recording-name'>
-                        {(string.IsNullOrEmpty(test.TestName) ? string.Empty : $"{test.TestName} ")
-                        } {
-                        (string.IsNullOrEmpty(test.RecordingName) ? string.Empty : $"({test.RecordingName})")}
-                    </div>
-                </div>
-            ");
-
-            report.AppendLine("<div class='recording-details-region'>");
-            if (!test.Steps.Any())
-            {
-                report.AppendLine("<h3 style='color: red;'><em>This test did not have any steps! Automatically failing as there should not be an \"empty\" test.</em></h3>");
-            }
-            int index = 0;
-            foreach (StepData step in test.Steps)
-            {
-                string stepStatus = GetStatusClass(step.Status);
-                // The toggle element under a test/recording expander that shows each step taken in a test/recording.
-                report.AppendLine($@"
-                    <div class='step-toggle {stepStatus}' onclick='ToggleDetails(this);'>
-                        <div class='status-indicator step-square {stepStatus}'>
-                            <div>{GetStatusIndicator(step.Status)}</div>
-                        </div>
-                        <div class='recording-name'>
-                            {step.ActionType} <span class='game-object-heirarchy'>[{step.Scene}: {step.Name}]</span>
-                        </div>
-                    </div>
-                ");
-                report.AppendLine("<div class='recording-details'>");
-                report.AppendLine("<h4>Screenshot Before</h4>");
-                if (!string.IsNullOrEmpty(step.ScreenshotBefore) && File.Exists(step.ScreenshotBefore))
-                {
-                    string screenshotName = Path.Combine(ReportSaveDirectory, "screenshots", $"screenshot_before_{(!string.IsNullOrEmpty(test.TestName) ? test.TestName : test.RecordingName)}_{index}");
-                    File.Copy(step.ScreenshotBefore, screenshotName, true);
-                    report.AppendLine($"<img class='screenshot' src='{screenshotName}'/>");
-                }
-                else
-                {
-                    report.AppendLine($"<div><em>N/A</em></div>");
-                }
-                report.AppendLine("<h4>Screenshot After</h4>");
-                if (!string.IsNullOrEmpty(step.ScreenshotAfter) && File.Exists(step.ScreenshotAfter))
-                {
-                    string screenshotName = Path.Combine(ReportSaveDirectory, "screenshots", $"screenshot_after_{(!string.IsNullOrEmpty(test.TestName) ? test.TestName : test.RecordingName)}_{index}");
-                    File.Copy(step.ScreenshotAfter, screenshotName, true);
-                    report.AppendLine($"<img class='screenshot' src='{screenshotName}'/>");
-                }
-                else
-                {
-                    report.AppendLine($"<div><em>N/A</em></div>");
-                }
-                // The steps' details
-                report.AppendLine($@"
-                    <div class='recording-details-data'>
-                        <div><strong>Scene:</strong>&nbsp;{step.Scene}</div> 
-					    <div><strong>Hierarchy:</strong>&nbsp;{step.Hierarchy}</div> 
-					    <div><strong>Coordinates:</strong>&nbsp;{step.Coordinates}</div>
-                    </div>
-                 ");
-
-                // Each log that was posted to the console during this test.
-                report.AppendLine("<div class='recording-details-logs'>");
-                if (!step.Logs.Any())
-                {
-                    report.AppendLine("<div><strong><em>No logs recorded during this step.</em></strong></div>");
-                }
-                foreach (Log log in step.Logs)
-                {
-                    report.AppendLine($@"
-                        <div class='console-log {(log.StackTrace.Length > 0 ? " has-stacktrace" : string.Empty)}' onclick='ShowStackTrace(this);'>
-                            <strong>
-                                <span class='char {GetLogTypeClass(log.Type)}'>
-                                    {GetLogTypeIndicator(log.Type)}
-                                </span>
-                                {(log.CountInARow > 0 ? $"&nbsp;[{log.CountInARow + 1}]" : string.Empty)}
-                            </strong>
-                            &nbsp;{log.Message}
-                            <input type='hidden' class='console-log-stacktrace' value='{log.StackTrace}'/>
-                        </div>");
-                }
-                report.AppendLine("</div>"); // End .recording-details-errors
-                report.AppendLine("</div>"); // End .recording-details
-                index++;
-            }
-            report.AppendLine("</div>"); // End .recording-details
-        }
-
-        report.AppendLine("</div>"); // End .recordings-container
-        report.AppendLine("</body>");
-        File.WriteAllText(Path.Combine(ReportSaveDirectory, $"{ReportFileNameWithoutExtension}.html"), report.ToString());
+        report.AppendLine(TestRunReportHtmlManiest.TEST_RUN_REPORT_HTML_TEMPLATE);
+        report.AppendLine($"<input id='test_results' type='hidden' value='{JsonUtility.ToJson(ReportData)}'/>");
+        File.WriteAllText(Path.Combine(ReportSaveDirectory, $"report.html"), report.ToString());
     }
 
     public static bool DoesReportExist(ReportType reportType)
@@ -525,68 +464,50 @@ public static class ReportingManager
         return string.Empty;
     }
 
-    private static char GetStatusIndicator(TestStatus status)
+    private static List<(string character, string encoding)> EncodingKeys = new List<(string, string)>();
+    /// <summary>
+    /// Prepares string for json insertion.
+    /// </summary>
+    /// <param name="val"></param>
+    /// <returns></returns>
+    public static string EncodeCharactersForJson(string val)
     {
-        switch (status)
+        if (string.IsNullOrEmpty(val))
         {
-            case TestStatus.Fail:
-                return TestRunReportHtmlManiest.ERROR_CHAR;
-            case TestStatus.NotRun:
-                return TestRunReportHtmlManiest.NOT_RUN_CHAR;
-            case TestStatus.Pass:
-                return TestRunReportHtmlManiest.CHECK_MARK_CHAR;
-            case TestStatus.Warning:
-                return TestRunReportHtmlManiest.WARNING_CHAR;
-            default:
-                return TestRunReportHtmlManiest.INFO_CHAR.ToCharArray().First();
+            return string.Empty;
         }
-    }
 
-    private static string GetStatusClass(TestStatus status)
-    {
-        switch (status)
+        string result = System.Text.RegularExpressions.Regex.Replace(val, @"[^\u0000-\u007F]+", string.Empty); //Remove non ASCII characters from strings.
+        result = new string(result.ToCharArray().ToList().FindAll(c => !char.IsControl(c)).ToArray()); //Remove control characters from strings.
+        if (EncodingKeys.Count == 0)
         {
-            case TestStatus.Fail:
-                return "fail";
-            case TestStatus.Pass:
-                return "pass";
-            case TestStatus.Warning:
-                return "warning";
-            case TestStatus.NotRun:
-            default:
-                return "notrun";
+            EncodingKeys.Add(("<", "&#60;"));
+            EncodingKeys.Add((">", "&#62;"));
+            EncodingKeys.Add(("-", "&#45;"));
+            EncodingKeys.Add((".", "&#46;"));
+            EncodingKeys.Add(("~", "&#126;"));
+            EncodingKeys.Add(("[", "&#91;"));
+            EncodingKeys.Add(("]", "&#93;"));
+            EncodingKeys.Add(("{", "&#123;"));
+            EncodingKeys.Add(("}", "&#125;"));
+            EncodingKeys.Add(("\\", "&#47;"));
+            EncodingKeys.Add(("\"", "&#39;"));
+            EncodingKeys.Add(("'", "&#39;"));
+            EncodingKeys.Add((":", "&#58;"));
+            EncodingKeys.Add(("(", "&#40;"));
+            EncodingKeys.Add((")", "&#41;"));
+            EncodingKeys.Add(("*", "&#42;"));
+            EncodingKeys.Add(("/", "&#47;"));
+            EncodingKeys.Add(("\n", " "));
+            EncodingKeys.Add(("\t", " "));
+            EncodingKeys.Add(("\r", " "));
+            EncodingKeys.Add(("\b", " "));
         }
-    }
 
-    private static string GetLogTypeIndicator(LogType logType)
-    {
-        switch (logType)
+        for (int x = 0; x < EncodingKeys.Count; x++)
         {
-            case LogType.Log:
-                return TestRunReportHtmlManiest.INFO_CHAR;
-            case LogType.Error:
-            case LogType.Exception:
-                return TestRunReportHtmlManiest.ERROR_CHAR.ToString();
-            case LogType.Warning:
-                return TestRunReportHtmlManiest.WARNING_CHAR.ToString();
-            default:
-                return TestRunReportHtmlManiest.NOT_RUN_CHAR.ToString();
+            result = result.Replace(EncodingKeys[x].character, EncodingKeys[x].encoding);
         }
-    }
-
-    private static string GetLogTypeClass(LogType logType)
-    {
-        switch (logType)
-        {
-
-            case LogType.Error:
-            case LogType.Exception:
-                return "error";
-            case LogType.Warning:
-                return "warn";
-            case LogType.Log:
-            default:
-                return "log";
-        }
+        return result;
     }
 }

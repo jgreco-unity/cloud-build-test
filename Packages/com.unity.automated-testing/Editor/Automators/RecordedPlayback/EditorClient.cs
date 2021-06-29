@@ -26,7 +26,7 @@ namespace Unity.CloudTesting.Editor
                 {
                 }
 
-                if (webrx.isNetworkError || webrx.isHttpError)
+                if (webrx.IsError())
                 {
                     throw new Exception("Failed to generate upload URL with error: " + webrx.error + "\n" + webrx.downloadHandler.text);
                 }
@@ -43,7 +43,7 @@ namespace Unity.CloudTesting.Editor
             {
                 // create temporary file that copies original
                 Debug.Log($"extractRecordingsFromComposite: {recordingName} {filePath}");
-                var tempFilePath = $"Assets/{AutomatedQARuntimeSettings.RecordingFolderPath}/Temp/{recordingName}";
+                var tempFilePath = $"{AutomatedQARuntimeSettings.RecordingFolderNameWithAssetPath}/Temp/{recordingName}";
                 var segmentDir = Path.GetDirectoryName(filePath) ?? "";
                 currRecording.touchData = currRecording.GetAllTouchData(segmentDir: segmentDir);
                 currRecording.recordings.Clear();
@@ -91,7 +91,7 @@ namespace Unity.CloudTesting.Editor
                     {
                     }
 
-                    if (webrx.isNetworkError || webrx.isHttpError)
+                    if (webrx.IsError())
                     {
                         Debug.LogError("Failed to upload with error \n" + webrx.error + "\n" + webrx.downloadHandler.text);
                         return;
@@ -134,11 +134,13 @@ namespace Unity.CloudTesting.Editor
                     webrx.uploadHandler = new UploadHandlerRaw(Encoding.UTF8.GetBytes(payload));
                     webrx.timeout = 30;
                     webrx.SendWebRequest();
+
+                    Debug.Log($"URL: {url}, pid: {Application.cloudProjectId} t: {CloudProjectSettings.accessToken}");
                     while (!webrx.isDone)
                     {
                     }
 
-                    if (webrx.isNetworkError || webrx.isHttpError)
+                    if (webrx.IsError())
                     {
                         throw new Exception("Failed to generate upload URL with error: " + webrx.error + "\n" + webrx.downloadHandler.text);
                     }

@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.IO;
 using Unity.AutomatedQA;
+using Unity.AutomatedQA.Listeners;
 using UnityEngine;
 using UnityEngine.EventSystems;
 using UnityEngine.SceneManagement;
@@ -37,19 +38,21 @@ namespace Unity.RecordedPlayback
                 return;
             }
 
-            Random.InitState(12345); //todo: rm
-
             initialized = true;
 
-            if (RecordedPlaybackPersistentData.GetRecordingMode() == RecordingMode.Playback && !File.Exists(RecordedPlaybackPersistentData.GetRecordingDataFilePath()))
+            if (!ReportingManager.IsTestWithoutRecordingFile && RecordedPlaybackPersistentData.GetRecordingMode() == RecordingMode.Playback && !File.Exists(RecordedPlaybackPersistentData.GetRecordingDataFilePath()))
             {
-                Debug.LogError("Recorded Playback file does not exist");
+                Debug.LogError($"Recorded Playback file does not exist.");
                 return;
             } 
 
             if (inputModule == null)
             {
                 inputModule = gameObject.AddComponent<RecordingInputModule>();
+            }
+            if (RecordedPlaybackPersistentData.GetRecordingMode() == RecordingMode.Record)
+            {
+                gameObject.AddComponent<KeyInputHandler>();
             }
             SetEventSystem();
             VisualFxManager.SetUp(Instance.transform);
@@ -94,6 +97,11 @@ namespace Unity.RecordedPlayback
             return _instance != null;
         }
 
+        public bool IsInitialized()
+        {
+            return initialized;
+        }
+
         /// <summary>
         /// Check if an EventSystem already exists at the time of recording or playback start.
         /// If one exists, set our EventSystem variables to the values defined by the existing system.
@@ -127,7 +135,6 @@ namespace Unity.RecordedPlayback
                     ourModule.horizontalAxis = theirModule.horizontalAxis;
                     ourModule.inputActionsPerSecond = theirModule.inputActionsPerSecond;
                     ourModule.repeatDelay = theirModule.repeatDelay;
-                    ourModule.forceModuleActive = theirModule.forceModuleActive;
                 }
 
                 EventSystem ourEventSystem = ourModule.GetComponent<EventSystem>();

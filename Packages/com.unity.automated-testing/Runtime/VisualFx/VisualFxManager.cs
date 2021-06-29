@@ -62,10 +62,29 @@ namespace Unity.AutomatedQA
                 _visualFxCanvases = value;
             }
         }
+        public static List<PulseManager> ActivePulseManagers {
+            get
+            {
+                for(int i = 0; i < _activePulseManagers.Count; i++)
+                {
+                    if (_activePulseManagers[i] == null)
+                    {
+                        _activePulseManagers.RemoveAt(i);
+                        i--;
+                    }
+                }
+                return _activePulseManagers;
+            }
+            set
+            {
+                _activePulseManagers = value;
+            }
+        }
+        public static List<PulseManager> _activePulseManagers = new List<PulseManager>();
+
 
         public static float PulseDuration = 3f;
         public static float PulseInterval = 0.65f;
-        public static List<PulseManager> ActivePulseManagers = new List<PulseManager>();
         private static List<GameObject> _visualFxCanvases = new List<GameObject>();
         private static DragFeedback dragFeedbackManager { get; set; }
         private static GameObject visualFxGo { get; set; }
@@ -151,10 +170,13 @@ namespace Unity.AutomatedQA
             }
             else
             {
-                // TODO: In some games, a drag event is triggered at playback start, but no actual drag is occuring, and no "release" event to the initial drag is ever triggered. Result is a visible trail from that spot to the first real drag.
+                // In some games, a drag event is triggered at playback start, but no actual drag is occuring, and no "release" event to the initial drag is ever triggered. Result is a visible trail from that spot to the first real drag.
                 if (lastDragInProgress)
                 {
-                    dragFeedbackManager.Move(position);
+                    if (dragFeedbackManager != null)
+                        dragFeedbackManager.Move(position);
+                    else
+                        lastDragInProgress = false;
                     return;
                 }
                 lastDragInProgress = true;
@@ -235,7 +257,9 @@ namespace Unity.AutomatedQA
             if (sizeOfTarget.x == 0 || sizeOfTarget.y == 0)
                 sizeOfTarget = targetRect.sizeDelta;
 
-            squareRect.sizeDelta = new Vector2(sizeOfTarget.x + 50, sizeOfTarget.y + 50);
+            int stretchBiasY = sizeOfTarget.y > sizeOfTarget.x ? 40 : 0;
+            int stretchBiasX = sizeOfTarget.x > sizeOfTarget.y ? 40 : 0;
+            squareRect.sizeDelta = new Vector2(sizeOfTarget.x + 50 + stretchBiasX, sizeOfTarget.y + 50 + stretchBiasY);
             squareRect.position = new Vector3(centerPointOfObjectOnScreen.x, centerPointOfObjectOnScreen.y, 0);
             RawImage img = square.GetComponent<RawImage>();
             img.color = new Color32(0, 255, 255, 200);
@@ -280,7 +304,7 @@ namespace Unity.AutomatedQA
                 return;
 
             // Drag events also use mouseup logic, so if we were dragging and just released the click, don't also create a click pulse.
-            if (lastFxEventType == FxEventType.Drag && !isMouseDown)
+            if (lastFxEventType == FxEventType.Drag && !isMouseDown && ActivePulseManagers.Any())
             {
                 ActivePulseManagers.Last().KillEarly(true); // Remove the IsMouseDown pulse that is currently holding (waiting for mouse release).
                 return; // We don't want a pulse/ripple effect either at the mousedown location or mouseup location of a drag event.

@@ -47,6 +47,7 @@ namespace Unity.RecordedTesting
         public string unityOrgId;
         public string awsDeviceUDID;
         public string awsDeviceModel;
+        public string awsDeviceName;
         public string awsDeviceOS;
     }
 
@@ -54,13 +55,15 @@ namespace Unity.RecordedTesting
     {
         public string testName;
         public string awsDeviceUDID;
+        public string awsDeviceModel;
 
-        public DeviceFarmOverrides(string testName)
+        public DeviceFarmOverrides(string testName, string deviceModel)
         {
             this.testName = testName;
+            this.awsDeviceModel = deviceModel;
         }
     }
-    
+
     [Serializable]
     internal class Counter
     {

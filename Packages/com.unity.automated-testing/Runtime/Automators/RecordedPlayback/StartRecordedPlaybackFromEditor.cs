@@ -1,4 +1,5 @@
 ﻿#if UNITY_EDITOR
+using System.Collections;
 using UnityEngine;
 using UnityEditor;
 
@@ -38,10 +39,14 @@ namespace Unity.RecordedPlayback.Editor
             new GameObject("StartRecordedPlaybackFromEditor").AddComponent<StartRecordedPlaybackFromEditor>();
         }
         
-        private void Start()
+        private IEnumerator Start()
         {
+            // Wait for 1 frame to avoid initializing too early
+            yield return null;
+
             if (Application.isPlaying && RecordedPlaybackPersistentData.GetRecordingMode() != RecordingMode.None)
             {
+                ReportingManager.IsAutomatorTest = false;
                 RecordedPlaybackController.Instance.Begin();
             }
 

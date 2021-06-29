@@ -36,10 +36,10 @@ namespace Unity.AutomatedQA
             AutomationSet set = settings.Configs.Find(c => c.Key == settingKey);
             if (set == null || set == default(AutomationSet))
             {
-                set = new AutomationSet(settingKey, RecordingFolderPath);
+                set = new AutomationSet(settingKey, RecordingFolderName);
                 setsToReAddToConfigSettingsFile.Add(set);
             }
-            RecordingFolderPath = set.Value.ToString();
+            RecordingFolderName = set.Value.ToString();
 
             settingKey = "ActivatePlaybackVisualFx";
             set = settings.Configs.Find(c => c.Key == settingKey);
@@ -85,6 +85,42 @@ namespace Unity.AutomatedQA
                 setsToReAddToConfigSettingsFile.Add(set);
             }
             EnableScreenshots = bool.Parse(set.Value.ToString());
+
+            settingKey = "UseDynamicWaits";
+            set = settings.Configs.Find(c => c.Key == settingKey);
+            if (set == null || set == default(AutomationSet))
+            {
+                set = new AutomationSet(settingKey, UseDynamicWaits.ToString());
+                setsToReAddToConfigSettingsFile.Add(set);
+            }
+            UseDynamicWaits = bool.Parse(set.Value.ToString());
+
+            settingKey = "DynamicWaitTimeout";
+            set = settings.Configs.Find(c => c.Key == settingKey);
+            if (set == null || set == default(AutomationSet))
+            {
+                set = new AutomationSet(settingKey, DynamicWaitTimeout.ToString());
+                setsToReAddToConfigSettingsFile.Add(set);
+            }
+            DynamicWaitTimeout = float.Parse(set.Value.ToString());
+
+            settingKey = "DynamicLoadSceneTimeout";
+            set = settings.Configs.Find(c => c.Key == settingKey);
+            if (set == null || set == default(AutomationSet))
+            {
+                set = new AutomationSet(settingKey, DynamicLoadSceneTimeout.ToString());
+                setsToReAddToConfigSettingsFile.Add(set);
+            }
+            DynamicLoadSceneTimeout = float.Parse(set.Value.ToString());
+
+            settingKey = "EnableDebugLogging";
+            set = settings.Configs.Find(c => c.Key == settingKey);
+            if (set == null || set == default(AutomationSet))
+            {
+                set = new AutomationSet(settingKey, EnableDebugLogging.ToString());
+                setsToReAddToConfigSettingsFile.Add(set);
+            }
+            EnableDebugLogging = bool.Parse(set.Value.ToString());
 
 #if UNITY_EDITOR
             // Add back any required configs that were deleted by the user.
@@ -159,7 +195,7 @@ namespace Unity.AutomatedQA
         private static string _packageAssetsFolderName;
 
         /// <summary>
-        /// Full path to folder on device where we store recording files.
+        /// Full path to folder where we store recording files.
         /// </summary>
         public static string RecordingDataPath
         {
@@ -167,7 +203,7 @@ namespace Unity.AutomatedQA
             {
                 if (string.IsNullOrEmpty(_recordingDataPath))
                 {
-                    _recordingDataPath = Path.Combine(Application.dataPath, RecordingFolderPath);
+                    _recordingDataPath = Path.Combine(Application.dataPath, RecordingFolderName);
                 }
                 return _recordingDataPath;
             }
@@ -179,9 +215,20 @@ namespace Unity.AutomatedQA
         private static string _recordingDataPath;
 
         /// <summary>
-        /// Name of folder on device where we store recording files.
+        /// Name of folder under Assets, including Assets path, where we store recording files.
         /// </summary>
-        public static string RecordingFolderPath
+        public static string RecordingFolderNameWithAssetPath
+        {
+            get
+            {
+                return $"Assets/{RecordingFolderName}";
+            }
+        }
+
+        /// <summary>
+        /// Name of folder under Assets where we store recording files.
+        /// </summary>
+        public static string RecordingFolderName
         {
             get
             {
@@ -198,6 +245,26 @@ namespace Unity.AutomatedQA
         }
         private static string _recordingFolderName;
 
+        /// <summary>
+        /// Name of folder where we tests generated from recordings.
+        /// </summary>
+        public static string GeneratedTestsFolderName
+        {
+            get
+            {
+                if (string.IsNullOrEmpty(_generatedTestsFolderName))
+                {
+                    _generatedTestsFolderName = "GeneratedTests";
+                }
+                return _generatedTestsFolderName;
+            }
+            set
+            {
+                _generatedTestsFolderName = value;
+            }
+        }
+        private static string _generatedTestsFolderName;
+        
         /// <summary>
         /// Enable or disable visual Fx feedback for actions taken during playback of recordings.
         /// If true, check individual feedback booleans to see if a subset will be activated. 
@@ -279,14 +346,31 @@ namespace Unity.AutomatedQA
         }
         private static bool _enableScreenshots = true;
 
+        /// <summary>
+        /// Adds extra debug messages during recording creation and playback.
+        /// </summary>
+        public static bool EnableDebugLogging
+        {
+            get
+            {
+                return _enableDebugLogging;
+            }
+            set
+            {
+                _enableDebugLogging = value;
+            }
+        }
+        private static bool _enableDebugLogging = true;
+
         public static BuildType buildType
         {
             get
             {
 #if AQA_BUILD_TYPE_FULL
                 return BuildType.FullBuild;
-#endif
+#else
                 return BuildType.UnityTestRunner;
+#endif
             }
         }
 
@@ -309,10 +393,67 @@ namespace Unity.AutomatedQA
                 // TODO use a runtime config file instead of preprocessor defines?
 #if AQA_RECORDING_STORAGE_CLOUD
                 return RecordingFileStorage.Cloud;
-#endif
+#else
                 return RecordingFileStorage.Local;
+#endif
             }
         }
+
+        /// <summary>
+        /// Wait for elements to become interactable before trying to interact with them (as opposed to waiting for the original recorded timeDelta period before executing an action).
+        /// </summary>
+        public static bool UseDynamicWaits
+        {
+            get
+            {
+                return _useDynamicWaits;
+            }
+            set
+            {
+                _useDynamicWaits = value;
+            }
+        }
+        private static bool _useDynamicWaits = true;
+
+        /// <summary>
+        /// Period of time to wait for a target GameObject to be ready while waiting to perform the next action in test playback.
+        /// </summary>
+        public static float DynamicWaitTimeout
+        {
+            get
+            {
+                if (_dynamicWaitTimeout < 0.001f)
+                {
+                    _dynamicWaitTimeout = 10f;
+                }
+                return _dynamicWaitTimeout;
+            }
+            set
+            {
+                _dynamicWaitTimeout = value;
+            }
+        }
+        private static float _dynamicWaitTimeout = 0f;
+
+        /// <summary>
+        /// Period of time to wait for scene load while waiting to perform the next action in test playback.
+        /// </summary>
+        public static float DynamicLoadSceneTimeout
+        {
+            get
+            {
+                if (_dynamicLoadSceneTimeout < 0.001f)
+                {
+                    _dynamicLoadSceneTimeout = 30f;
+                }
+                return _dynamicLoadSceneTimeout;
+            }
+            set
+            {
+                _dynamicLoadSceneTimeout = value;
+            }
+        }
+        private static float _dynamicLoadSceneTimeout = 0f;
 
         private static TextAsset configTextAsset {
             get {
@@ -345,12 +486,17 @@ namespace Unity.AutomatedQA
             if (configTextAsset == null)
             {
                 AutomatedQASettingsData configCategories = new AutomatedQASettingsData();
+                configCategories.Configs.Add(new AutomationSet("EnableDebugLogging", EnableDebugLogging.ToString()));
                 configCategories.Configs.Add(new AutomationSet("EnableScreenshots", EnableScreenshots.ToString()));
-                configCategories.Configs.Add(new AutomationSet("RecordingFolderName", RecordingFolderPath));
+                configCategories.Configs.Add(new AutomationSet("RecordingFolderName", RecordingFolderName));
                 configCategories.Configs.Add(new AutomationSet("ActivatePlaybackVisualFx", ActivatePlaybackVisualFx.ToString()));
                 configCategories.Configs.Add(new AutomationSet("ActivateClickFeedbackFx", ActivateClickFeedbackFx.ToString()));
                 configCategories.Configs.Add(new AutomationSet("ActivateDragFeedbackFx", ActivateDragFeedbackFx.ToString()));
                 configCategories.Configs.Add(new AutomationSet("ActivateHighlightFeedbackFx", ActivateHighlightFeedbackFx.ToString()));
+                configCategories.Configs.Add(new AutomationSet("UseDynamicWaits", UseDynamicWaits.ToString()));
+                configCategories.Configs.Add(new AutomationSet("DynamicWaitTimeout", DynamicWaitTimeout.ToString()));
+                configCategories.Configs.Add(new AutomationSet("DynamicLoadSceneTimeout", DynamicLoadSceneTimeout.ToString()));
+
 #if UNITY_EDITOR
                 File.WriteAllText(Path.Combine(Application.dataPath, AutomatedQASettingsResourcesPath, AutomatedQaSettingsFileName), JsonUtility.ToJson(configCategories));
 #endif

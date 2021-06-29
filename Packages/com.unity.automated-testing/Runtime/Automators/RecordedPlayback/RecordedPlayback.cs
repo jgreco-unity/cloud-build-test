@@ -98,6 +98,12 @@ namespace Unity.RecordedPlayback
         {
             recordingData.SaveToFile(GetRecordingDataFilePath());
         }
+        
+        public static void SetRecordingData(string rawData)
+        {
+            RecordedPlaybackPersistentData.CleanRecordingData();
+            File.WriteAllText(GetRecordingDataFilePath(), rawData);
+        }
 
         public static void SetRecordingDataFromFile(string sourcePath)
         {
@@ -141,25 +147,22 @@ namespace Unity.RecordedPlayback
             return new List<string>();
         }
 
-        public static void CleanRecordingData(bool cleanScreenshots = false)
+        public static void CleanRecordingData()
         {
-            File.Delete(Path.Combine(AutomatedQARuntimeSettings.PersistentDataPath, kRecordedPlaybackFilename));
+            Directory.CreateDirectory(Path.Combine(AutomatedQARuntimeSettings.PersistentDataPath,
+                AutomatedQARuntimeSettings.PackageAssetsFolderName));
+            
+            string recordingFile =
+                Path.Combine(AutomatedQARuntimeSettings.PersistentDataPath, kRecordedPlaybackFilename);
+            if(File.Exists(recordingFile))
+            {
+                File.Delete(recordingFile);
+            }
+            
             var regex = new Regex("recording_segment_.*\\.json");
             foreach (var segment in Directory.EnumerateFiles(AutomatedQARuntimeSettings.PersistentDataPath).ToList().FindAll(x => regex.IsMatch(Path.GetFileName(x))))
             {
                 File.Delete(segment);
-            }
-            if(cleanScreenshots)
-            {
-                string[] folders = Directory.GetDirectories(AutomatedQARuntimeSettings.PersistentDataPath);
-                foreach (string folder in folders)
-                {
-                    string foldername = folder.Split(Path.DirectorySeparatorChar).Last();
-                    if (foldername.Contains("screenshots"))
-                    {
-                        Directory.Delete(folder, true);
-                    }
-                }
             }
         }
 
@@ -170,6 +173,10 @@ namespace Unity.RecordedPlayback
             if (!string.IsNullOrEmpty(destDir) && !Directory.Exists(destDir))
             {
                 Directory.CreateDirectory(destDir);
+            }
+            if (!File.Exists(sourcePath))
+            {
+                Debug.LogException(new UnityException($"Required recording file does not exist [{sourcePath}]."), null);
             }
             File.Copy(sourcePath, destPath, true);
             createdFiles.Add(destPath);

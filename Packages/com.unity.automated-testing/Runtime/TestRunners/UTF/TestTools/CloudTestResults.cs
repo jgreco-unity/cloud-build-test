@@ -55,7 +55,8 @@ namespace Unity.RecordedTesting
                 // var xmlResult = result.ToXml(true).OuterXml;
                 CloudTestManager.Instance.ResetTestResults();
                 CloudTestManager.Instance.SetCounter(result.Name, result.ResultState.Status == TestStatus.Passed ? 1 : 0);
-                var dfConfOverrides = new DeviceFarmOverrides(result.FullName);
+                var deviceModelName = SystemInfo.deviceModel;
+                var dfConfOverrides = new DeviceFarmOverrides(result.FullName, deviceModelName);
                 if (_dfConf.awsDeviceUDID == null)
                 {
                     dfConfOverrides.awsDeviceUDID = "Local-Device-UDID";

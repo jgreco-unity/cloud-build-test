@@ -37,7 +37,7 @@ namespace Unity.RecordedTesting.Runtime
                 {
                 }
 
-                if (webrx.isNetworkError || webrx.isHttpError)
+                if (webrx.IsError())
                 {
                     Debug.LogError($"Couldn't download file. Error - {webrx.error}");
                 }

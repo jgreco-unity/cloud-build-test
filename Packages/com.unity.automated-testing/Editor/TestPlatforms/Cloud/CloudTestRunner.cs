@@ -13,22 +13,21 @@ namespace Unity.CloudTesting.Editor
 {
     public class CloudTestRunner: ITestPlayerBuildModifier
     {
-        private string       _token;
-        
         public BuildPlayerOptions ModifyOptions(BuildPlayerOptions playerOptions)
         {
             if (CloudTestPipeline.IsRunningOnCloud())
             {
                 playerOptions.options &= ~(BuildOptions.AutoRunPlayer);
+#if UNITY_IOS
+                playerOptions.locationPathName = Path.Combine(CloudTestPipeline.BuildFolder, Application.identifier);
+#else
                 playerOptions.locationPathName = CloudTestPipeline.BuildPath;
+#endif
 
                 return playerOptions;    
             }
-            else
-            {
-                return playerOptions;
-            }
-            
+
+            return playerOptions;
         }
     }
 }

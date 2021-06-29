@@ -50,12 +50,21 @@ namespace Unity.AutomatedQA.EditorTests
             Assert.NotZero(summary.totalSize);
         }
 
+        
+        /// winPlatformTest
+        /// Builds the player for Windows
+        /// This uses UTR test filtering, which will filter tests by function name. e.g.:
+        /// --extra-utr-arg="--testfilter=win"
         [Test]
         public void winPlatformTest()
         {
             HelperPlatformTest("win");
         }
         
+        /// macPlatformTest
+        /// Builds the player for Mac
+        /// This uses UTR test filtering, which will filter tests by function name. e.g.:
+        /// --extra-utr-arg="--testfilter=mac"
         [Test]
         public void macPlatformTest()
         {

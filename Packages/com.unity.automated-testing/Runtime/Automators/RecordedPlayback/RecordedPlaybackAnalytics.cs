@@ -41,16 +41,21 @@ public class RecordedPlaybackAnalytics
         public string recordingName;
         public string sceneName;
         public bool testPassed;
-//        public string executionType;
-//        public int testDuration;
-//        public string testType;
-//        public string tags;
+        public int testDuration;
+        public string executionType;
+        public string testType;
+        public string tags;
 
-        public RecordingExecution(string recordingName, string sceneName, bool testPassed)
+        public RecordingExecution(string recordingName, string sceneName, bool testPassed, int testDuration)
         {
             this.recordingName = recordingName;
             this.sceneName = sceneName;
             this.testPassed = testPassed;
+            this.testDuration = testDuration;
+            executionType = ReportingManager.IsAutomatorTest ? "automated_run" : "recording";
+            testType = ReportingManager.IsTestWithoutRecordingFile ? "script" :
+                ReportingManager.IsCompositeRecording ? "composite" : "simple";
+            tags = Application.isBatchMode ? "batch_mode" : "";
         }
     }
     
@@ -79,9 +84,10 @@ public class RecordedPlaybackAnalytics
         SendEvent(new RecordingCreation(recordingName, recordingSize, numRecordingActions, 0, 0), creationEvent);
     }
 
-    public static void SendRecordingExecution(string recordingName, string sceneName)
+    public static void SendRecordingExecution(string recordingName, string sceneName, bool testPassed, int testDuration)
     {
-        SendEvent(new RecordingExecution(recordingName, sceneName, true), executionEvent);
+        var recordingExecution = new RecordingExecution(recordingName, sceneName, testPassed, testDuration);
+        SendEvent(recordingExecution, executionEvent);
     }
     
     public static void SendRecordedPlaybackEnv()

@@ -1,5 +1,9 @@
 fileFormatVersion: 2
-guid: b084013703e20704ebbefe127835bf67
+<<<<<<< HEAD:com.unity.automated-testing/Runtime/VisualFx.meta
+guid: 209ffcebb0d1248c98b9d0c768b75d2b
+=======
+guid: 1ee62cad677b0483bb9363516a17131d
+>>>>>>> b59234c (Appium file push):Projects/CloudTestingDev/Assets/AutomatedTesting/Temp/Resources.meta
 folderAsset: yes
 DefaultImporter:
   externalObjects: {}

@@ -36,7 +36,7 @@ namespace Unity.AutomatedQA.Editor
         {
             base.OnInspectorGUI();
             var run = target as AutomatedRun;
-
+               
             EditorGUI.BeginDisabledGroup(Application.isPlaying);
             if (GUILayout.Button("Run"))
             {
@@ -46,7 +46,7 @@ namespace Unity.AutomatedQA.Editor
             
             if (GUILayout.Button("Generate Test"))
             {
-                AutomatedRunTestCreator.GenerateAutomatedRunTest(run.name);
+                AutomatedRunTestCreator.GenerateAutomatedRunTest(AssetDatabase.GetAssetPath(run));
             }
         }
     }

@@ -3,6 +3,7 @@ using NUnit.Framework;
 using Unity.RecordedTesting;
 using Unity.RecordedTesting.TestTools;
 using UnityEngine.TestTools;
+using Unity.CloudTesting;
 
 namespace GeneratedRecordedTests
 {
@@ -16,6 +17,7 @@ namespace GeneratedRecordedTests
         /// Asserts that the recording can successfully play through to the end. 
         /// </summary>
         [UnityTest]
+        [CloudTest]
         [RecordedTest("#RECORDING_FILE#")]
         public IEnumerator CanPlayToEnd()
         {

@@ -1,7 +1,8 @@
 using System;
 using System.Collections.Generic;
+using UnityEngine.Networking;
 using UnityEngine;
-
+    
 namespace Unity.AutomatedQA
 {
 
@@ -158,6 +159,34 @@ namespace Unity.AutomatedQA
             }
         }
 
+        public static bool IsError(this UnityWebRequest uwr)
+        {
+#if UNITY_2020_1_OR_NEWER
+            return uwr.result != UnityWebRequest.Result.Success;
+#else
+            return uwr.isNetworkError || uwr.isHttpError;
+#endif
+        }
+
+        public static List<T> GetUniqueObjectsBetween<T>(this List<T> thisList, List<T> otherList)
+        {
+            List<T> unique = new List<T>();
+            for (int i = 0; i < thisList.Count; i++)
+            {
+                if (!otherList.Contains(thisList[i]))
+                {
+                    unique.Add(thisList[i]);
+                }
+            }
+            for (int x = 0; x < otherList.Count; x++)
+            {
+                if (!thisList.Contains(otherList[x]))
+                {
+                    unique.Add(otherList[x]);
+                }
+            }
+            return unique;
+        }
     }
 
 }
