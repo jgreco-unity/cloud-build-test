@@ -403,17 +403,28 @@ public static class ReportingManager
 
     public static void GenerateXmlReport()
     {
+        GenerateXmlReport(ReportData.Tests, Path.Combine(ReportSaveDirectory, $"{ReportFileNameWithoutExtension}.xml"));
+    }
+
+    public static void GenerateXmlReport(List<TestData> tests, string outputPath)
+    {
         StringBuilder xmlReport = new StringBuilder();
         xmlReport.AppendLine("<?xml version=\"1.0\" encoding=\"UTF-8\"?>");
         xmlReport.AppendLine("<testsuites>");
-        int failCount = ReportData.Tests.FindAll(x => x.Status == TestStatus.Fail.ToString()).Count;
-        xmlReport.AppendLine($"<testsuite failures=\"{failCount}\" tests=\"{ReportData.Tests.Count}\" errors=\"{failCount}\" name=\"Automation-Tests\" skipped=\"{ReportData.Tests.FindAll(x => x.Status == TestStatus.NotRun.ToString()).Count}\" time=\"{Time.time}\">");
-        foreach (TestData test in ReportData.Tests)
+        int failCount = tests.FindAll(x => x.Status == TestStatus.Fail.ToString()).Count;
+        xmlReport.AppendLine($"<testsuite failures=\"{failCount}\" tests=\"{tests.Count}\" errors=\"{failCount}\" name=\"Automation-Tests\" skipped=\"{tests.FindAll(x => x.Status == TestStatus.NotRun.ToString()).Count}\" time=\"{Time.time}\">");
+        foreach (TestData test in tests)
         {
             // Extrapolate test results into xml nodes to append to the test run's xml report.
             string[] namePieces = string.IsNullOrEmpty(test.TestName) ? new string[] { } : test.TestName.Split('.');
             string className = string.IsNullOrEmpty(test.TestName) ? "NotACompiledTest" : (namePieces.Length > 1 ? namePieces[namePieces.Length - 2] : "CouldNotFindClassName");
             string testName = string.IsNullOrEmpty(test.TestName) ? test.RecordingName : namePieces[namePieces.Length - 1];
+            if (test.TestName.Contains(":"))
+            {
+                string[] deviceInfo = test.TestName.Split(':');
+                testName = deviceInfo.Length > 1? $"{deviceInfo[0]}:{deviceInfo[1]}:{testName}" : testName;
+            }
+
             if (test.Status == TestStatus.Fail.ToString() || test.Status == TestStatus.Warning.ToString())
             {
                 xmlReport.AppendLine($"<testcase classname=\"{className}\" name=\"{testName}\" time=\"{test.EndTime - test.StartTime}\">");
@@ -431,7 +442,7 @@ public static class ReportingManager
         }
         xmlReport.AppendLine("</testsuite>");
         xmlReport.AppendLine("</testsuites>");
-        File.WriteAllText(Path.Combine(ReportSaveDirectory, $"{ReportFileNameWithoutExtension}.xml"), xmlReport.ToString());
+        File.WriteAllText(outputPath, xmlReport.ToString());
     }
 
     public static void GenerateHtmlReport()

@@ -331,6 +331,7 @@ namespace Unity.CloudTesting.Editor
                 string outputPath = Path.Combine(AutomatedQARuntimeSettings.PersistentDataPath, "CloudTestResults", $"TestResults-{jobId}.html");
                 Directory.CreateDirectory(Path.GetDirectoryName(outputPath));
                 File.WriteAllText(outputPath, TestResultsToHTML(jobId, testResults));
+                TestResultsToXML(testResults);
 
                 if (!Application.isBatchMode)
                 {
@@ -411,6 +412,23 @@ namespace Unity.CloudTesting.Editor
 
 
             return sb.ToString();
+        }
+
+        private static void TestResultsToXML(TestResultsResponse data)
+        {
+            var tests = new List<ReportingManager.TestData>();
+            foreach (var result in data.testResults)
+            {
+                foreach (var c in result.counters)
+                {
+                    var testData = new ReportingManager.TestData();
+                    testData.TestName = $"{result.deviceModel}:{result.deviceName}:{result.testName}:{c._name}";
+                    testData.Status = c._value == 1 ? ReportingManager.TestStatus.Pass.ToString() : ReportingManager.TestStatus.Fail.ToString();
+                    tests.Add(testData);
+                }
+            }
+
+            ReportingManager.GenerateXmlReport(tests, Path.Combine(BuildFolder, "cloud-test-report.xml"));
         }
 
         private static void HandleError(string msg)
