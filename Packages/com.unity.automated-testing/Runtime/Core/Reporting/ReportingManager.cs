@@ -451,7 +451,7 @@ public static class ReportingManager
             string[] namePieces = string.IsNullOrEmpty(test.TestName) ? new string[] { } : test.TestName.Split('.');
             string className = string.IsNullOrEmpty(test.TestName) ? "NotACompiledTest" : (namePieces.Length > 1 ? namePieces[namePieces.Length - 2] : "CouldNotFindClassName");
             string testName = string.IsNullOrEmpty(test.TestName) ? test.RecordingName : namePieces[namePieces.Length - 1];
-            if (test.TestName.Contains(":"))
+            if (!string.IsNullOrEmpty(test.TestName) && test.TestName.Contains(":"))
             {
                 string[] deviceInfo = test.TestName.Split(':');
                 testName = deviceInfo.Length > 1? $"{deviceInfo[0]}:{deviceInfo[1]}:{testName}" : testName;
