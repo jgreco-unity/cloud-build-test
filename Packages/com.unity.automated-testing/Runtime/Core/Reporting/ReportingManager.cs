@@ -8,7 +8,6 @@ using UnityEngine.SceneManagement;
 using Unity.RecordedTesting;
 using System.IO;
 using UnityEngine.EventSystems;
-using System.Web;
 
 public static class ReportingManager
 {
@@ -34,7 +33,7 @@ public static class ReportingManager
     [SerializeField]
     public static string CurrentTestName;
 
-    public static GameObject ReportingMonitor { get; set; }
+    public static GameObject ReportingMonitorInstance { get; set; }
     public static TestRunData ReportData { get; set; }
     public static bool IsAutomatorTest { get; set; }
     public static bool IsTestWithoutRecordingFile { get; set; }
@@ -50,8 +49,11 @@ public static class ReportingManager
         public TestRunData()
         {
             Tests = new List<TestData>();
+            FpsData = new List<FpsData>();
+            AllLogs = new List<Log>();
         }
         public List<Log> AllLogs;
+        public List<FpsData> FpsData;
         public bool IsLocalRun;
         public string RunStartTime;
         public string RunFinishtTime;
@@ -67,7 +69,8 @@ public static class ReportingManager
     [Serializable]
     public class TestData
     {
-        public TestData() {
+        public TestData()
+        {
             Status = TestStatus.NotRun.ToString();
             Steps = new List<StepData>();
         }
@@ -84,7 +87,8 @@ public static class ReportingManager
     [Serializable]
     public class StepData
     {
-        public StepData() {
+        public StepData()
+        {
             Status = TestStatus.NotRun.ToString();
             Logs = new List<Log>();
         }
@@ -98,6 +102,14 @@ public static class ReportingManager
         public string ScreenshotAfter;
         public string Status;
         public List<Log> Logs;
+    }
+
+    [Serializable]
+    public class FpsData
+    {
+        public string CurrentStepDataName;
+        public string Fps;
+        public string TimeStamp;
     }
 
     [Serializable]
@@ -124,16 +136,30 @@ public static class ReportingManager
     }
 
     /// <summary>
+    /// Record the current framerate.
+    /// </summary>
+    public static void SampleFramerate()
+    {
+        if (ReportData == null)
+            return;
+        FpsData fpsData = new FpsData();
+        fpsData.CurrentStepDataName = ReportData.Tests.Any() && ReportData.Tests.Last().Steps.Any() ? $"{ReportData.Tests.Last().TestName} > [{ReportData.Tests.Last().Steps.Last().ActionType.ToUpper()} {ReportData.Tests.Last().Steps.Last().Hierarchy} > {ReportData.Tests.Last().Steps.Last().Name}]" : string.Empty;
+        fpsData.Fps = Math.Round(1.0f / Time.deltaTime, 0).ToString();
+        fpsData.TimeStamp = Math.Round(Time.time, 1).ToString();
+        ReportData.FpsData.Add(fpsData);
+    }
+
+    /// <summary>
     /// Creates listener that checks for OnApplicationQuit and other hooks which represent the appropriate time to finalize and generate a report.
     /// </summary>
     public static void CreateMonitoringService()
     {
-        if (ReportingMonitor == null)
+        if (ReportingMonitorInstance == null)
         {
-            ReportingMonitor = new GameObject("AutomatedQAReportingMonitor");
-            ReportingMonitor rm = ReportingMonitor.AddComponent<ReportingMonitor>();
+            ReportingMonitorInstance = new GameObject("AutomatedQAReportingMonitor");
+            ReportingMonitor rm = ReportingMonitorInstance.AddComponent<ReportingMonitor>();
             rm.RecordingMode = RecordingInputModule.Instance.RecordingMode;
-            UnityEngine.Object.DontDestroyOnLoad(ReportingMonitor);
+            UnityEngine.Object.DontDestroyOnLoad(ReportingMonitorInstance);
         }
     }
 
@@ -150,7 +176,6 @@ public static class ReportingManager
 #else
         ReportData.IsLocalRun = false;
 #endif
-        ReportData.AllLogs = new List<Log>();
         ReportData.RunStartTime = DateTime.UtcNow.ToString();
         ReportData.DeviceType = SystemInfo.deviceType.ToString();
         ReportData.DeviceModel = SystemInfo.deviceModel;
@@ -159,7 +184,7 @@ public static class ReportingManager
         Application.logMessageReceived -= RecordLog; // Detach if already attached.
         Application.logMessageReceived += RecordLog; // Attach handler to recieve incoming logs.
 
-        if(Directory.Exists(ReportSaveDirectory))
+        if (Directory.Exists(ReportSaveDirectory))
             Directory.Delete(ReportSaveDirectory, true);
         Directory.CreateDirectory(ReportSaveDirectory);
         Directory.CreateDirectory(Path.Combine(ReportSaveDirectory, "screenshots"));
@@ -211,6 +236,7 @@ public static class ReportingManager
 
         GenerateXmlReport();
         GenerateHtmlReport();
+        UnityEngine.Object.DestroyImmediate(ReportingMonitorInstance);
     }
 
     /// <summary>
@@ -225,10 +251,7 @@ public static class ReportingManager
 
         // Test was already initialized. Most likely due to errors or logs requiring test data initialization before it would normally be invoked.
         bool isCurrentTestAlreadyInitialized = ReportData.Tests.Any() && ReportData.Tests.FindAll(x => x.TestName == CurrentTestName).Any();
-        // If this is a full generated test, this method will be invoked when empty scenes are loaded between Unity Test Runner test execution. Ignore when that happens.
-        bool isCurrentGameStateReadyForInitialization = IsTestWithoutRecordingFile &&
-            (string.IsNullOrEmpty(CurrentTestName) || SceneManager.GetActiveScene().name.ToLower().Contains("emptyscene"));
-        if (isCurrentTestAlreadyInitialized || isCurrentGameStateReadyForInitialization)
+        if (isCurrentTestAlreadyInitialized || (IsTestWithoutRecordingFile && string.IsNullOrEmpty(CurrentTestName)))
             return;
 
         if (ReportData.Tests.Any() && ReportData.Tests.Last().InProgress)
@@ -274,11 +297,17 @@ public static class ReportingManager
         currentRecording.EndTime = Time.time;
         currentRecording.InProgress = false;
 
+        List<StepData> stepsToUpdate = currentRecording.Steps.FindAll(x => x.Scene.ToLower().Contains("emptyscene"));
+        foreach (StepData step in stepsToUpdate)
+        {
+            step.Scene = SceneManager.GetActiveScene().name;
+        }
+
         RecordedPlaybackAnalytics.SendRecordingExecution(
             RecordedPlaybackPersistentData.kRecordedPlaybackFilename,
             EntryScene,
             currentRecording.Status == TestStatus.Pass.ToString(),
-            (int) (currentRecording.EndTime - currentRecording.StartTime)
+            (int)(currentRecording.EndTime - currentRecording.StartTime)
         );
         IsAutomatorTest = false;
     }
@@ -290,7 +319,8 @@ public static class ReportingManager
     public static void AddStep(StepData step)
     {
         if (!ReportData.Tests.Any())
-            return;
+            InitializeDataForNewTest();
+
         // If this is the continuation of a drag, only record the drag start and next drag release.
         if (ReportData.Tests.Last().Steps.Any()
             && ReportData.Tests.Last().Steps.Last().ActionType.ToLowerInvariant() == "drag"
@@ -350,6 +380,8 @@ public static class ReportingManager
         if (!anyTestsSet && !anyStepsSet && isCurrentTestNameSet)
         {
             InitializeDataForNewTest();
+            if (!ReportData.Tests.Any())
+                return;
         }
 
         // If the newest log is identical to the last log, increment the last log. Otherwise record as a new log.
@@ -357,7 +389,7 @@ public static class ReportingManager
         Log lastLogAll = ReportData.AllLogs.Any() ? ReportData.AllLogs.Last() : new Log();
         bool incrementingLastAllLog = false;
         bool incrementingLastStepLog = false;
-        if (lastLogAll.Message == message && lastLogAll.Type == type.ToString()) 
+        if (lastLogAll.Message == message && lastLogAll.Type == type.ToString())
         {
             incrementingLastAllLog = true;
             lastLogAll.CountInARow++;
@@ -376,7 +408,7 @@ public static class ReportingManager
             StackTrace = type == LogType.Exception ? stackTrace : string.Empty,
             Type = type.ToString(),
         };
-        if(!incrementingLastAllLog)
+        if (!incrementingLastAllLog)
             ReportData.AllLogs.Add(newLog);
         if (!incrementingLastStepLog)
             ReportData.Tests.Last().Steps.Last().Logs.Add(newLog);
@@ -387,7 +419,7 @@ public static class ReportingManager
             TestData currentTest = ReportData.Tests.Last();
             StepData currentStep = currentTest.Steps.Last();
             currentTest.Status = currentStep.Status = TestStatus.Fail.ToString();
-            if(RecordingInputModule.Instance != null)
+            if (RecordingInputModule.Instance != null)
                 RecordingInputModule.Instance.CaptureScreenshots(); // Errors may prevent normal screen capture logic from being hit.
         }
         // Report warning status on associated step.
@@ -448,7 +480,7 @@ public static class ReportingManager
     public static void GenerateHtmlReport()
     {
         StringBuilder report = new StringBuilder();
-        report.AppendLine(TestRunReportHtmlManiest.TEST_RUN_REPORT_HTML_TEMPLATE);
+        report.AppendLine(TestRunReportHtmlManifest.TEST_RUN_REPORT_HTML_TEMPLATE);
         report.AppendLine($"<input id='test_results' type='hidden' value='{JsonUtility.ToJson(ReportData)}'/>");
         File.WriteAllText(Path.Combine(ReportSaveDirectory, $"report.html"), report.ToString());
     }
