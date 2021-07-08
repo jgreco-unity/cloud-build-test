@@ -3,7 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Text;
 using Unity.AutomatedQA;
-using Unity.RecordedTesting.Runtime;
+using Unity.RecordedPlayback.Editor;
 using UnityEditor;
 using UnityEngine;
 using UnityEngine.EventSystems;
@@ -47,7 +47,9 @@ namespace Unity.CloudTesting.Editor
                 var segmentDir = Path.GetDirectoryName(filePath) ?? "";
                 currRecording.touchData = currRecording.GetAllTouchData(segmentDir: segmentDir);
                 currRecording.recordings.Clear();
+                RecordedPlaybackEditorUtils.CreateDirectoryIfNotExists(Path.GetDirectoryName(tempFilePath));
                 currRecording.SaveToFile(tempFilePath);
+                RecordedPlaybackEditorUtils.MarkFileAsCreated(tempFilePath);
 
                 return tempFilePath;
             }
@@ -63,14 +65,14 @@ namespace Unity.CloudTesting.Editor
             Debug.Log($"Uploading file {filePath} as {recordingName}");
             
             // if composite recording, combine touchData for all referenced recordings
-            var targetFilePath = FormatRecording( recordingName, filePath);
-
-            Transaction.Upload(url, recordingName, targetFilePath);
-
-            if (targetFilePath.Contains("temp"))
+            try
             {
-                // after upload delete temporary file < needed?  
-                File.Delete(targetFilePath);
+                var targetFilePath = FormatRecording(recordingName, filePath);
+                Transaction.Upload(url, recordingName, targetFilePath);
+            }
+            finally
+            {
+                RecordedPlaybackEditorUtils.ClearCreatedPaths();
             }
         }
 

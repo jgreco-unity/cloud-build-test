@@ -13,7 +13,7 @@ using Unity.RecordedTesting;
 
 namespace Unity.RecordedPlayback
 {
-    
+
     [Serializable]
     public class RecordedPlaybackAutomatorConfig : AutomatorConfig<RecordedPlaybackAutomator>
     {
@@ -25,9 +25,9 @@ namespace Unity.RecordedPlayback
         public override void BeginAutomation()
         {
             base.BeginAutomation();
-            
+
             string recordingFileName = "";
-            
+
             if (config.recordingFile != null)
             {
                 Debug.Log($"Using recording asset - recordingFile: {config.recordingFile.name}");
@@ -40,8 +40,8 @@ namespace Unity.RecordedPlayback
             }
 
             StartCoroutine(PlayRecording(recordingFileName));
-        }       
-        
+        }
+
         private IEnumerator PlayRecording(string recordingFileName)
         {
             // Load scene
@@ -49,14 +49,14 @@ namespace Unity.RecordedPlayback
             RecordedPlaybackPersistentData.RecordedResolution = recordingData.recordedResolution;
             RecordedPlaybackPersistentData.RecordedAspectRatio = recordingData.recordedAspectRatio;
             yield return LoadEntryScene(recordingData);
-            
+
             if (RecordedPlaybackController.Exists())
             {
                 RecordedPlaybackController.Instance.Reset();
             }
             RecordedPlaybackPersistentData.SetRecordingMode(RecordingMode.Playback, recordingFileName);
             RecordedPlaybackController.Instance.Begin();
-            
+
             while (!RecordedPlaybackController.Exists() || !RecordedPlaybackController.Instance.IsPlaybackCompleted())
             {
                 yield return null;
@@ -64,23 +64,27 @@ namespace Unity.RecordedPlayback
 
             EndAutomation();
         }
-        
+
         private IEnumerator LoadEntryScene(RecordingInputModule.InputModuleRecordingData recordingData)
         {
             if (config.loadEntryScene)
             {
                 Debug.Log($"Load Scene {recordingData.entryScene}");
                 var loadSceneAsync = SceneManager.LoadSceneAsync(recordingData.entryScene);
-                while (!loadSceneAsync.isDone)
+                float timer = AutomatedQARuntimeSettings.DynamicLoadSceneTimeout;
+                while (!loadSceneAsync.isDone && timer > 0)
                 {
-                    yield return null;
+                    yield return new WaitForEndOfFrame();
+                    timer -= Time.deltaTime;
+                }
+                if (!loadSceneAsync.isDone && timer <= 0)
+                {
+                    Debug.LogError($"Failed to load scene in timeout period. Scene [{recordingData.entryScene}] Timeout [{AutomatedQARuntimeSettings.DynamicLoadSceneTimeout}]");
                 }
             }
-           
-
             yield return WaitForFirstActiveScene(recordingData, 60);
         }
-        
+
         private IEnumerator WaitForFirstActiveScene(RecordingInputModule.InputModuleRecordingData recordingData, int timeoutSecs)
         {
             var touchData = recordingData.GetAllTouchData();

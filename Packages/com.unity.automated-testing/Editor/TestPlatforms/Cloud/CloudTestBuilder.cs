@@ -16,7 +16,7 @@ namespace Unity.CloudTesting.Editor
     public class CloudTestBuilder
     {
         private static BuildTarget? targetPlatform;
-        private static BuildTarget TargetPlatform
+        public static BuildTarget TargetPlatform
         {
           get => targetPlatform?? EditorUserBuildSettings.activeBuildTarget;
           set => targetPlatform = value;

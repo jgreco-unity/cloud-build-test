@@ -1,4 +1,4 @@
-﻿public static class TestRunReportHtmlManiest
+﻿public static class TestRunReportHtmlManifest
 {
 
 	public static readonly string TEST_RUN_REPORT_HTML_TEMPLATE = @"
@@ -6,9 +6,9 @@
 			<script type='text/javascript' src='https://www.gstatic.com/charts/loader.js'></script>
 			<script src='https://code.jquery.com/jquery-3.6.0.min.js' integrity='sha256-/xUj+3OJU5yExlq6GSYGSHk7tPXikynS7ogEvDej/m4=' crossorigin='anonymous'></script>
 			<script type='text/javascript'>
-				google.charts.load('current', {'packages':['corechart']});
-				google.charts.setOnLoadCallback(drawChart);
-				function drawChart() {
+				google.charts.load('current', {'packages':['corechart', 'line']});
+				google.charts.setOnLoadCallback(drawCharts);
+				function drawCharts() {
 					let statusData = $('.pie-chart-data').val().split(',');
 					let chartData = [];
 					for(let x = 0; x < statusData.length; x++) {
@@ -26,15 +26,30 @@
 					var chart = new google.visualization.PieChart(document.getElementById('piechart'));
 					function selectHandler() {
 						var selectedItem = chart.getSelection()[0];
-						if (selectedItem) {
+						if (typeof selectedItem != 'undefined' && selectedItem != null) {
 							PieChartSelect(data.getValue(selectedItem.row, 0));
 						}
 					}
-				google.visualization.events.addListener(chart, 'select', selectHandler);
-				chart.draw(data, options);
-			  }
-			</script>
-			<script>
+					google.visualization.events.addListener(chart, 'select', selectHandler);
+					chart.draw(data, options);
+					ShowFpsPopup();
+					
+					/*
+						TODO: Fix.
+						PROBLEM: Annotations will not work the first time a user opens the FPS modal.
+							After closing the modal and re-opening it again, the issue is resolved.
+							As a workaround, I am quitely opening and closing the modal on page load.
+							The user will not see this happening, as the modal is set to hidden while it does this.
+					*/
+					$('.fps > .modal-close').click();
+					$('.modal-background').css('visibility', 'hidden');
+					$('.fps').css('visibility', 'hidden');
+					setTimeout(function() {
+						$('.modal-background').css('visibility', 'visible');
+						$('.fps').css('visibility', 'visible');
+					}, 1000);
+				}		
+
 				var INFO_CHAR = '&#128712;';
 				var NOT_RUN_CHAR = '―';
 				var ERROR_CHAR = '✘';
@@ -115,13 +130,77 @@
 				function ShowStackTrace(el) {
 					let stacktrace = $(el).find('.console-log-stacktrace').val();
 					if(stacktrace.length == 0) return;
-					let modal = $('.modal-popup');
+					let modal = $('.modal-popup.stacktrace');
 					let modal_background = $('.modal-background');
 					modal.css('display', 'block');
 					modal.find('.stacktrace-value').text(stacktrace);
 					modal_background.css('display', 'block');
 					modal_background.addClass('modal-background-show').css('animation-direction', 'normal');
 					modal.addClass('modal-show').css('animation-direction', 'normal');
+				}
+				
+				function ShowFpsPopup(el) {		
+					SetFpsChart();
+					let modal = $('.modal-popup.fps');
+					let modal_background = $('.modal-background');
+					modal.css('display', 'block');
+					modal_background.css('display', 'block');
+					modal_background.addClass('modal-background-show').css('animation-direction', 'normal');
+					modal.addClass('modal-show').css('animation-direction', 'normal');
+				}
+				
+				function SetFpsChart() {
+					var data2 = new google.visualization.DataTable();
+					data2.addColumn('number', 'X');
+					data2.addColumn('number', 'FPS');
+					data2.addColumn({type:'string', role:'annotation'});
+					data2.addColumn({type:'string', role:'annotationText'});
+	
+					var testResultsJson = JSON.parse($('#test_results').val());
+					let min_val = 999;
+					let max_val = 0;
+					let max_time = parseFloat(testResultsJson.FpsData[testResultsJson.FpsData.length-1].TimeStamp);
+					let rows = [];
+					for(let x = 0; x < testResultsJson.FpsData.length; x++) {
+						let fpsData = testResultsJson.FpsData[x];
+						let fps = parseFloat(fpsData.Fps);
+						if(fps > max_val)
+							max_val = fps;
+						else if(fps < min_val)
+							min_val = fps;
+						rows.push([parseFloat(fpsData.TimeStamp), fps,  '*', fpsData.CurrentStepDataName]);
+					}
+					data2.addRows(rows);
+					
+					var options2 = {
+						width: window.innerWidth- (window.innerWidth * 0.15),
+						height: window.innerHeight- (window.innerHeight * 0.15) - 75,
+						hAxis: {
+						  title: 'Time.time',
+						  minValue: 0,
+						  maxValue: parseInt(max_time + 1)
+						},
+						vAxis: {
+						  title: 'FPS',
+						  minValue: min_val > max_val ? 0 : min_val + 5,
+						  maxValue: max_val < min_val ? 999 : max_val - 5,
+							gridlines: {
+							color: 'transparent'
+						  },
+						},
+						chartArea: { 
+							width: '80%', 
+							height: '80%' 
+						},
+						annotation: {
+							1: {
+								style: 'default'
+							}
+						}
+					};
+
+					var fpsChart = new google.visualization.LineChart(document.getElementById('framerate-graph'));
+					fpsChart.draw(data2, options2);
 				}
 		
 				var last_selected = '';
@@ -258,7 +337,7 @@
 									<div>✔</div>
 								</div> 
 								<div class='recording-name'>
-									 ${(test.TestName == null || test.TestName.length == 0 ? test.RecordingName : `${test.TestName}: (${test.RecordingName})`)}
+									 ${(test.TestName == null || test.TestName.length == 0 ? test.RecordingName : test.RecordingName == null || test.RecordingName.length == 0 ? test.TestName : `${test.TestName}: (${test.RecordingName})`)}
 								</div>
 							</div>
 						`;
@@ -358,6 +437,30 @@
 					white-space: normal;
 					word-break: break-word;
 				}
+				.fps-button
+				{
+					cursor: pointer;
+					position: absolute;
+					top: 1px;
+					right: 1px;
+					width: 100px;
+					height: 40px;
+					background-color: blue;
+					border-radius: 6px;
+				}
+				.fps-button > div {
+					display: block;
+					margin: 0 auto;
+					width: 65px;
+					top: 12px;
+					color: white;
+					font-size: 1em;
+					position: relative;
+				}
+				#framerate-graph {
+					position: relative;
+					width: 100%;
+				}
 				.game-object-heirarchy {
 					font-size: 12px;
 					vertical-align: middle;
@@ -428,8 +531,16 @@
 					border: 2px solid black;
 					border-radius: 6px;
 				}
+				.modal-popup.fps {
+					z-index: 99;
+					margin-left: 25px;
+					margin-right: 25px;
+					width: 95% !important;
+					height: 95% !important;
+					overflow: scroll;
+				}
 				.modal-title {
-					width: 150px;
+					width: 250px;
 					margin-left: 50%;
 					transform: translate(-50%);
 				}
@@ -692,12 +803,10 @@
 					.test-run-data-region {
 						position: relative;
 						top: 20;
+						width: calc(100% - 50px);
 					}
 					.recordings-container {
 						margin-top: 740px;
-					 }
-					.test-run-data-region {
-						width: calc(100% - 50px);
 					}
 				}
 				@keyframes toggleVisible {
@@ -713,13 +822,6 @@
 			</style>
 		</head>
 
-		<div class='modal-background' onclick='$("".modal-close"").click();'></div>
-		<div class='modal-popup'>
-			<div class='modal-close' onclick='$(this).parent().css(""animation-direction"", ""reverse"");$("".modal-background"").css(""animation-direction"", ""reverse"");'>X</div>
-			<h2 class='modal-title'>Stack Trace</h2>
-			<div class='stacktrace-value'></div>
-		</div>
-
 		<svg class='header-logo' width='100' height='80' viewBox='0 0 89 32' xmlns='http://www.w3.org/2000/svg'>
 			<g fill='currentColor' fill-rule='evenodd'>
 				<path d='M28.487 0L15.42 3.405l-1.933 3.318-3.924-.029L0 15.995l9.564 9.3 3.922-.03 1.938 3.317 13.063 3.405 3.5-12.702-1.989-3.29 1.989-3.29L28.487 0zM13.802 7.257l9.995-2.498-5.737 9.665H6.584l7.218-7.167zm0 17.474l-7.218-7.166H18.06l5.737 9.664-9.995-2.498zm12.792.927l-5.74-9.663 5.74-9.667 2.771 9.667-2.771 9.663zM58.123 9.424c-1.746 0-2.918.723-3.791 2.095h-.075V9.773h-3.055v12.795h3.13V15.31c0-1.746 1.097-2.943 2.594-2.943 1.421 0 2.48.843 2.48 2.345v7.856h3.131v-8.355c0-2.794-1.77-4.789-4.414-4.789M46.44 17.15c0 1.696-.973 2.893-2.57 2.893-1.446 0-2.356-.823-2.356-2.32V9.767h-3.13v8.53c0 2.793 1.596 4.614 4.44 4.614 1.795 0 2.793-.673 3.666-1.845h.074v1.496h3.01V9.767H46.44v7.383M64.178 22.568h3.131V9.773h-3.13zM64.178 8.354h3.131V5.783h-3.13zM85.002 9.773l-1.86 5.761c-.4 1.173-.748 2.794-.748 2.794h-.08s-.424-1.621-.823-2.794l-2.1-5.76h-3.347l3.442 9.102c.723 1.946.972 2.769.972 3.467 0 1.048-.548 1.746-1.895 1.746h-1.197v2.669h1.995c2.594 0 3.494-1.023 4.467-3.866l4.511-13.119h-3.337M73.142 18.802v-6.784h1.995V9.773h-1.995v-3.99h-3.11v3.99h-1.77v2.245h1.77v7.507c0 2.42 1.822 3.068 3.468 3.068 1.346 0 1.712-.05 1.712-.05v-2.474s-.374.005-.798.005c-.749 0-1.272-.325-1.272-1.272'></path>
@@ -732,6 +834,7 @@
 
 		<div class='status-summary-region'>
 			<div class='test-run-data-region'>
+				<div class='fps-button' onclick='ShowFpsPopup($(this))'><div>FPS Data</div></div>
 				<div class='test-run-data'><div class='data-label'>Time Started UTC:</div><div id='start_time' class='data-value'></div></div>
 				<div class='test-run-data'><div class='data-label'>Total Run Time:</div><div id='run_time' class='data-value'></div></div>
 				<div class='test-run-data'><div class='data-label'>Device Type:</div><div id='device_type' class='data-value'></div></div>
@@ -745,6 +848,20 @@
 			<div class='piechart-messages'></div>
 		</div>
 		<div class='recordings-container'></div>
+
+		<input class='pie-chart-data' type='hidden' value =''/>
+	
+		<div class='modal-background' onclick='$("".modal-close"").click();'></div>
+		<div class='modal-popup stacktrace'>
+			<div class='modal-close' onclick='$(this).parent().css(""animation-direction"", ""reverse"");$("".modal-background"").css(""animation-direction"", ""reverse"");'>X</div>
+			<h2 class='modal-title'>Stack Trace</h2>
+			<div class='stacktrace-value'></div>
+		</div>
+		<div class='modal-popup fps' style='display: none; animation-direction: reverse;'>
+			<div class='modal-close' onclick='$(this).parent().css(""animation-direction"", ""reverse"");$("".modal-background"").css(""animation-direction"", ""reverse"");'>X</div>
+			<h2 class='modal-title'>Frame Rate Graph</h2>
+			<div id='framerate-graph'></div>
+		</div>
 
 		<input class='pie-chart-data' type='hidden' value =''/>
 	";

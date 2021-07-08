@@ -26,6 +26,10 @@ namespace UnityEngine.EventSystems
         private static readonly string playbackCompleteSignal = "playbackComplete";
         private static readonly string segmentCompleteSignal = "segmentComplete";
 
+        [SerializeField]
+        [HideInInspector]
+        public static bool isWorkInProgress { get; set; }
+
         private static int screenshotCounter = 0;
         private static DateTime start = DateTime.Now;
 
@@ -85,8 +89,26 @@ namespace UnityEngine.EventSystems
             InitRecordingData();
             InitScenes();
             SendAnalytics();
-
+            StartCoroutine(TrackFrameRate());
             base.OnEnable();
+        }
+
+        private bool trackingFps = false;
+        private IEnumerator TrackFrameRate()
+        {
+            if (trackingFps)
+            {
+                yield return null;
+            }
+            else
+            {
+                trackingFps = true;
+                while (Application.isPlaying)
+                {
+                    yield return new WaitForSeconds(0.5f);
+                    ReportingManager.SampleFramerate();
+                }
+            }
         }
 
         private void InitConfigData()
@@ -188,7 +210,6 @@ namespace UnityEngine.EventSystems
             waitStartTime = GetElapsedTime();
         }
 
-
         internal float GetLastEventTime()
         {
             return lastEventTime;
@@ -263,7 +284,6 @@ namespace UnityEngine.EventSystems
             bool isGameObjectTouch = td.HasObject();
 
             // Has the next GameObject taken too long to become ready for the next interaction?
-            float tempt = Time.time;
             if (Time.time - lastActionTriggeredTime >= (SceneManager.GetActiveScene().isLoaded ? AutomatedQARuntimeSettings.DynamicWaitTimeout : AutomatedQARuntimeSettings.DynamicLoadSceneTimeout))
             {
                 currentPeriodBetweenTargetReadinessChecks = -targetReadinessWaitInterval;
@@ -1631,7 +1651,7 @@ namespace UnityEngine.EventSystems
 #endif
 
             Directory.CreateDirectory(path);
-           if (_recordingMode == RecordingMode.Playback)
+            if (_recordingMode == RecordingMode.Playback)
             {
                 ReportingManager.AddScreenshot(file);
             }
@@ -1642,7 +1662,7 @@ namespace UnityEngine.EventSystems
         IEnumerator CaptureScreenshot(string path)
         {
             yield return new WaitForEndOfFrame();
-            
+
 #if UNITY_EDITOR_OSX || UNITY_STANDALONE_OSX
             Texture2D screenImage = new Texture2D(Screen.width, Screen.height, TextureFormat.RGB24, false);
             screenImage.ReadPixels(new Rect(0, 0, Screen.width, Screen.height), 0, 0);
@@ -1661,37 +1681,46 @@ namespace UnityEngine.EventSystems
         /// <param name="pause"></param>
         private void OnApplicationFocus(bool hasFocus)
         {
-            if (!hasFocus)
+            if (!hasFocus && !Application.isEditor)
             {
-                if (_recordingMode != RecordingMode.Record)
-                {
-                    return;
-                }
-                RecordedPlaybackPersistentData.SetRecordingData(_recordingData);
+                EndRecording();
             }
         }
 
         private void OnApplicationQuit()
         {
-            if (_recordingMode == RecordingMode.Playback)
+            EndRecording();
+        }
+
+        public void EndRecording()
+        {
+            if (touchData.Count == 0)
             {
-                RecordedPlaybackPersistentData.CleanRecordingData();
-            }
-            else if (_recordingMode != RecordingMode.Record)
-            {
+                RecordedPlaybackController.Instance.Reset();
                 return;
             }
-
-            if (_recordingData.recordingType == InputModuleRecordingData.type.composite && touchData.Count > 0)
+            else if (_recordingData.recordingType == InputModuleRecordingData.type.composite && touchData.Count > 0)
             {
                 SaveRecordingSegment();
             }
 
-            _recordingData.touchData = touchData;
-            _recordingData.AddPlaybackCompleteEvent(GetElapsedTime());
-            _recordingData.recordedAspectRatio = new Vector2(Screen.width, Screen.height);
-            _recordingData.recordedResolution = new Vector2(Screen.currentResolution.width, Screen.currentResolution.height);
-            RecordedPlaybackPersistentData.SetRecordingData(_recordingData);
+            if (_recordingMode == RecordingMode.Record)
+            {
+                _recordingData.touchData = touchData;
+                _recordingData.AddPlaybackCompleteEvent(GetElapsedTime());
+                _recordingData.recordedAspectRatio = new Vector2(Screen.width, Screen.height);
+                _recordingData.recordedResolution = new Vector2(Screen.currentResolution.width, Screen.currentResolution.height);
+                RecordedPlaybackPersistentData.SetRecordingData(_recordingData);
+            }
+            else if (_recordingMode == RecordingMode.Playback)
+            {
+                ReportingManager.FinalizeReport();
+                RecordedPlaybackPersistentData.CleanRecordingData();
+            }
+
+            touchData = new List<TouchData>();
+            RecordedPlaybackController.Instance.Reset();
+            isWorkInProgress = false;
         }
 
         [Serializable]
@@ -1834,8 +1863,6 @@ namespace UnityEngine.EventSystems
                 return JsonUtility.FromJson<InputModuleRecordingData>(text);
             }
         }
-
-
 
         private enum playbackExecutionState
         {

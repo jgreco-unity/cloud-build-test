@@ -28,7 +28,7 @@ namespace Unity.AutomatedQA
         }
 
         public State state { get; internal set; } = State.NOT_STARTED;
-        
+
         public AutomationFinishedEvent OnAutomationFinished = new AutomationFinishedEvent();
 
 
@@ -45,23 +45,25 @@ namespace Unity.AutomatedQA
             state = State.COMPLETE;
 
             OnAutomationFinished.Invoke(new AutomationFinishedEvent.Args(this));
+            if (ReportingManager.IsAutomatorTest)
+                ReportingManager.FinalizeReport();
         }
 
-        public virtual void Cleanup() {}
+        public virtual void Cleanup() { }
     }
 
     public abstract class Automator<T> : Automator where T : AutomatorConfig
     {
         protected T config;
-        
+
         public sealed override void Init()
         {
             Init(Activator.CreateInstance<T>());
         }
-        
+
         public sealed override void Init(AutomatorConfig config)
         {
-            Init((T) config);
+            Init((T)config);
         }
 
         public virtual void Init(T config)

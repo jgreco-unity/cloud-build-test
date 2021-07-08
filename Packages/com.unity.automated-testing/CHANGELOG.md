@@ -5,7 +5,15 @@ All notable changes to this package will be documented in this file.
 The format is based on [Keep a Changelog](http://keepachangelog.com/en/1.0.0/)
 and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Bug Fixes and Minor Changes
+- Reverting change that removed the ability to generate "Simple Tests", which is a test that points to a recording file.
+- Fixed an issue with temp directories not being properly deleted.
+- Adding FPS tracking to reports. FPS sampled over duration of test execution is displayed in a graph accessible from the html report (FPS Data button).
+
 ## [0.5.0] - 2021-06-24
+
 ### Major Features and Improvements
 - Support for running tests on real iOS devices in the cloud
 - New [CloudTest] attribute can be used to specify any Unity Test Framework test to run on real devices in the cloud
