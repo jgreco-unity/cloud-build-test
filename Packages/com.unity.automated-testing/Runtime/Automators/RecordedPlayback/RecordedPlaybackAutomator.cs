@@ -1,15 +1,9 @@
 ﻿using System;
 using System.Collections;
-using System.Collections.Generic;
-using System.IO;
 using Unity.AutomatedQA;
-using Unity.RecordedPlayback;
-using Unity.RecordedTesting.Runtime;
 using UnityEngine;
 using UnityEngine.EventSystems;
 using UnityEngine.SceneManagement;
-using Unity.RecordedTesting;
-
 
 namespace Unity.RecordedPlayback
 {
@@ -27,21 +21,20 @@ namespace Unity.RecordedPlayback
             base.BeginAutomation();
 
             string recordingFileName = "";
-
             if (config.recordingFile != null)
             {
-                Debug.Log($"Using recording asset - recordingFile: {config.recordingFile.name}");
+                logger.Log($"Using recording asset - recordingFile: {config.recordingFile.name}");
                 RecordedPlaybackPersistentData.SetRecordingData(config.recordingFile.text);
                 recordingFileName = config.recordingFile.name;
             }
             else
             {
-                Debug.Log($"Using RecordedPlaybackPersistentData - kRecordedPlaybackFilename: {RecordedPlaybackPersistentData.kRecordedPlaybackFilename}");
+                logger.Log($"Using RecordedPlaybackPersistentData - kRecordedPlaybackFilename: {RecordedPlaybackPersistentData.kRecordedPlaybackFilename}");
             }
 
             StartCoroutine(PlayRecording(recordingFileName));
         }
-
+ 
         private IEnumerator PlayRecording(string recordingFileName)
         {
             // Load scene
@@ -52,12 +45,13 @@ namespace Unity.RecordedPlayback
 
             if (RecordedPlaybackController.Exists())
             {
+                // Reset controller if a previous recording just finished playing
                 RecordedPlaybackController.Instance.Reset();
             }
             RecordedPlaybackPersistentData.SetRecordingMode(RecordingMode.Playback, recordingFileName);
             RecordedPlaybackController.Instance.Begin();
 
-            while (!RecordedPlaybackController.Exists() || !RecordedPlaybackController.Instance.IsPlaybackCompleted())
+            while (!RecordedPlaybackController.IsPlaybackCompleted())
             {
                 yield return null;
             }
@@ -67,19 +61,19 @@ namespace Unity.RecordedPlayback
 
         private IEnumerator LoadEntryScene(RecordingInputModule.InputModuleRecordingData recordingData)
         {
-            if (config.loadEntryScene)
+            if (config.loadEntryScene && !string.IsNullOrEmpty(recordingData.entryScene))
             {
-                Debug.Log($"Load Scene {recordingData.entryScene}");
+                logger.Log($"Load Scene {recordingData.entryScene}");
                 var loadSceneAsync = SceneManager.LoadSceneAsync(recordingData.entryScene);
                 float timer = AutomatedQARuntimeSettings.DynamicLoadSceneTimeout;
                 while (!loadSceneAsync.isDone && timer > 0)
                 {
-                    yield return new WaitForEndOfFrame();
+                    yield return null;
                     timer -= Time.deltaTime;
                 }
                 if (!loadSceneAsync.isDone && timer <= 0)
                 {
-                    Debug.LogError($"Failed to load scene in timeout period. Scene [{recordingData.entryScene}] Timeout [{AutomatedQARuntimeSettings.DynamicLoadSceneTimeout}]");
+                    yield return null;
                 }
             }
             yield return WaitForFirstActiveScene(recordingData, 60);
@@ -94,15 +88,15 @@ namespace Unity.RecordedPlayback
                 var firstActionScene = touchData[0].scene;
                 if (!string.IsNullOrEmpty(firstActionScene) && SceneManager.GetActiveScene().name != firstActionScene)
                 {
-                    Debug.Log($"Waiting for scene {firstActionScene} to load");
+                    logger.Log($"Waiting for scene {firstActionScene} to load");
                 }
                 while (!string.IsNullOrEmpty(firstActionScene) && SceneManager.GetActiveScene().name != firstActionScene)
                 {
                     var elapsed = DateTime.UtcNow.Subtract(startTime).TotalSeconds;
-                    Debug.Log(elapsed);
+                    logger.Log(elapsed);
                     if (elapsed >= timeoutSecs)
                     {
-                        Debug.LogError($"Timeout wile waiting for scene {firstActionScene} to load");
+                        logger.LogError($"Timeout wile waiting for scene {firstActionScene} to load");
                         break;
                     }
                     yield return new WaitForSeconds(1);

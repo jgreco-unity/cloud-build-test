@@ -31,6 +31,8 @@ namespace Unity.RecordedTesting
 
         public static string GetLocalRecordingFile(string testName) 
         {
+            var logger = new AQALogger();
+
             //TODO: Cache this ?
             foreach (var testdata in GetAllRecordedTests())
             {
@@ -40,7 +42,7 @@ namespace Unity.RecordedTesting
                 }
             }
 
-            Debug.LogError($"Recording file not found for test {testName}");
+            logger.LogError($"Recording file not found for test {testName}");
             return null;
         }
 
@@ -137,32 +139,29 @@ namespace Unity.RecordedTesting
 
         public static string CreateFileFromResource(string resourcePath, string fileName)
         {
+            AQALogger logger = new AQALogger();
+
             var resource = Path.Combine(Path.GetDirectoryName(resourcePath), Path.GetFileNameWithoutExtension(resourcePath));
             var recording = Resources.Load<TextAsset>(resource);
             if (recording != null)
             {
                 string destPath = Path.Combine(AutomatedQARuntimeSettings.PersistentDataPath, fileName);
                 File.WriteAllText(destPath, recording.text);
-                Debug.Log($"Copied recording file {resourcePath} to {destPath}");
+                logger.Log($"Copied recording file {resourcePath} to {destPath}");
                 return destPath;
             }
             else
             {
-                Debug.LogError($"Could not load recording {resourcePath}");
+                logger.LogError($"Could not load recording {resourcePath}");
             }
 
             return null;
-        }
-        
-        private static bool IsPlaybackCompleted()
-        {
-            return RecordedPlaybackController.Exists() && RecordedPlaybackController.Instance.IsPlaybackCompleted();
         }
 
         public static IEnumerator TestPlayToEnd()
         {
             ReportingManager.IsAutomatorTest = false;
-            while (!IsPlaybackCompleted())
+            while (!RecordedPlaybackController.IsPlaybackCompleted())
             {
                 yield return null;
             }

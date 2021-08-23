@@ -2,6 +2,8 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Threading;
+using TestPlatforms.Cloud;
+using Unity.AutomatedQA;
 using Unity.AutomatedQA.Editor;
 using UnityEditor;
 using UnityEditor.Callbacks;
@@ -15,12 +17,7 @@ namespace Unity.CloudTesting.Editor
 {
     public class CloudTestBuilder
     {
-        private static BuildTarget? targetPlatform;
-        public static BuildTarget TargetPlatform
-        {
-          get => targetPlatform?? EditorUserBuildSettings.activeBuildTarget;
-          set => targetPlatform = value;
-        }
+        public static ICloudTestClient Client = new CloudTestClient();
 
 #if UNITY_IOS
         [PostProcessBuild]
@@ -45,104 +42,160 @@ namespace Unity.CloudTesting.Editor
         }
 #endif
 
-        public static void CreateLocalBuild()
+        public static void CreateBuild()
         {
+            var args = ParseCommandLineArgs();
+            CreateBuild(args.TargetPlatform);
+        }
+
+        public static void CreateBuild(BuildTarget targetPlatform)
+        {
+            Debug.Log("Creating Build for platform " + targetPlatform);
+            if (File.Exists(CloudTestConfig.BuildPath))
+            {
+                File.Delete(CloudTestConfig.BuildPath);
+            }
+
+#if UNITY_IOS
+            if (Directory.Exists(CloudTestConfig.IOSBuildDir))
+            {
+                Directory.Delete(CloudTestConfig.IOSBuildDir, true);
+            }
+#endif
+
             // Editor code flag for utf cloud workflows
             CloudTestPipeline.SetTestRunOnCloud(true);
 
             // Setting scripting defines
-            AutomatedQAEditorSettings.ApplyBuildFlags(EditorUserBuildSettings.selectedBuildTargetGroup);
+            AutomatedQAEditorSettings.ApplyBuildFlags(BuildPipeline.GetBuildTargetGroup(targetPlatform));
 
             var filter = GetTestFilter();
 
-            Debug.Log($"Build target = {EditorUserBuildSettings.activeBuildTarget}");
-            CloudTestPipeline.MakeBuild(filter.ToArray());
-        }
+            CloudTestPipeline.MakeBuild(filter.ToArray(), targetPlatform);
 
-        public static void CreateBuild()
-        {
-            ParseCommandLineArgs();
-            File.Delete(CloudTestPipeline.BuildPath);
-            CloudTestPipeline.SetTestRunOnCloud(true);
-            Debug.Log("Creating Build for platform " + TargetPlatform);
-            AutomatedQAEditorSettings.ApplyBuildFlags(BuildPipeline.GetBuildTargetGroup(TargetPlatform));
-            var filter = GetTestFilter();
-            CloudTestPipeline.testBuildFinished += () => Debug.Log($"Build {CloudTestPipeline.BuildPath} complete");
-            CloudTestPipeline.MakeBuild(filter.ToArray(), TargetPlatform);
             if (Application.isBatchMode)
             {
+                CloudTestPipeline.testBuildFinished += () => Debug.Log($"Build {CloudTestConfig.BuildPath} complete");
+                // Since MakeBuild executes on Update we need to manually invoke it to prevent batch mode exiting early
                 EditorApplication.update.Invoke();
             }
         }
 
-        public static CloudTestPipeline.UploadUrlResponse BuildAndUpload()
+        private static UploadUrlResponse UploadBuild(string buildPath, string accessToken, string projectId)
         {
-            CreateBuild();
-            var uploadUrlResponse = CloudTestPipeline.UploadBuild();
+            var uploadUrlResponse = Client.UploadBuild(buildPath, accessToken, projectId);
             Debug.Log($"Uploaded build with id {uploadUrlResponse.id}");
             return uploadUrlResponse;
         }
 
-        public static void BuildAndRunTests()
+        private static void RunTests(string buildId, string accessToken, string projectId)
         {
             var cloudTests = new List<string>(new[] { "DummyUTFTest" });
-
-            var uploadUrlResponse = BuildAndUpload();
-            Thread.Sleep(TimeSpan.FromSeconds(30f)); // wait before triggering tests to avoid failure
-
             Debug.Log($"Running Cloud Tests: {string.Join(",", cloudTests)}");
-            var jobStatusResponse = CloudTestPipeline.RunCloudTests(uploadUrlResponse.id, cloudTests);
+            var jobStatusResponse = Client.RunCloudTests(buildId, cloudTests, accessToken, projectId);
 
-            AwaitTestResults(jobStatusResponse.jobId);
+            AwaitTestResults(jobStatusResponse.jobId, accessToken, projectId);
         }
 
-        private static void AwaitTestResults(string jobId)
+        public static void BuildAndRunTests()
         {
-            ParseCommandLineArgs();
-            var jobStatusResponse = CloudTestPipeline.GetJobStatus(jobId);
-            while (jobStatusResponse.status != "COMPLETED" && jobStatusResponse.status != "ERROR" && jobStatusResponse.status != "UNKNOWN")
+            var args = ParseCommandLineArgs();
+            BuildAndRunTests(args.TargetPlatform, args.AccessToken, args.ProjectId);
+        }
+
+        public static void BuildAndRunTests(BuildTarget targetPlatform, string accessToken, string projectId)
+        {
+            CreateBuild(targetPlatform);
+            UploadAndRunTests(CloudTestConfig.BuildPath, accessToken, projectId);
+        }
+        
+        public static void UploadAndRunTests()
+        {
+            var args = ParseCommandLineArgs();
+            UploadAndRunTests(args.UploadFile, args.AccessToken, args.ProjectId );
+        }
+
+        public static void UploadAndRunTests(string uploadFile, string accessToken, string projectId)
+        {
+            UploadUrlResponse uploadUrlResponse = UploadBuild(uploadFile, accessToken, projectId);
+            Thread.Sleep(TimeSpan.FromSeconds(30f)); // wait before triggering tests to avoid failure
+            RunTests(uploadUrlResponse.id, accessToken, projectId);
+        }
+
+        internal static TestResultsResponse AwaitTestResults(string jobId, string accessToken, string projectId)
+        {
+            var jobStatusResponse = Client.GetJobStatus(jobId, accessToken, projectId);
+            while (jobStatusResponse.IsInProgress())
             {
                 Thread.Sleep(TimeSpan.FromSeconds(60f));
-                jobStatusResponse = CloudTestPipeline.GetJobStatus(jobStatusResponse.jobId);
+                jobStatusResponse = Client.GetJobStatus(jobStatusResponse.jobId, accessToken, projectId);
             }
 
-            var testResults = CloudTestPipeline.GetTestResults(jobStatusResponse.jobId);
-            if (Application.isBatchMode && !testResults.allPass)
+            var testResults = Client.GetTestResults(jobStatusResponse.jobId, accessToken, projectId);
+            if (!testResults.allPass)
             {
                 throw new Exception("Job has completed but there are failing tests");
             }
 
             Debug.Log("All tests passed");
+            return testResults;
         }
 
-        private static void ParseCommandLineArgs()
+        private static CommandLineArgs ParseCommandLineArgs()
         {
-            var accessToken = GetArgValue("token");
+            return ParseCommandLineArgs(Environment.GetCommandLineArgs());
+        }
+
+        internal static CommandLineArgs ParseCommandLineArgs(string[] args)
+        {
+            var commandLineArgs = new CommandLineArgs();
+            var accessToken = GetArgValue("token", args);
             if (!string.IsNullOrEmpty(accessToken))
             {
-                CloudTestPipeline.AccessToken = accessToken;
+                commandLineArgs.AccessToken = accessToken;
             }
 
-            string testPlatformStr = GetArgValue("testPlatform");
+            string testPlatformStr = GetArgValue("testPlatform", args);
             if (!string.IsNullOrEmpty(testPlatformStr))
             {
                 if (!Enum.TryParse(testPlatformStr, true, out BuildTarget testPlatform))
                 {
                     throw new Exception($"Invalid testPlatform {testPlatformStr}, please use a valid BuildTarget");
                 }
-                TargetPlatform = testPlatform;
+                commandLineArgs.TargetPlatform = testPlatform;
             }
 
-            var outputDir = GetArgValue("outputDir");
+            var projectId = GetArgValue("projectId", args);
+            if (!string.IsNullOrEmpty(projectId))
+            {
+                commandLineArgs.ProjectId = projectId;
+            }
+
+            var outputDir = GetArgValue("outputDir", args);
             if (!string.IsNullOrEmpty(outputDir))
             {
-                CloudTestPipeline.BuildFolder = outputDir;
+                CloudTestConfig.BuildFolder = outputDir;
             }
+
+            var uploadFile = GetArgValue("uploadFile", args);
+            if (!string.IsNullOrEmpty(uploadFile))
+            {
+                commandLineArgs.UploadFile = uploadFile;
+            }
+            
+            EditorUserBuildSettings.exportAsGoogleAndroidProject = IsArgFlagSet("exportAsGoogleAndroidProject", args);
+
+            return commandLineArgs;
         }
 
-        private static string GetArgValue(string name)
+        private static bool IsArgFlagSet(string name, string[] args)
         {
-            var args = Environment.GetCommandLineArgs();
+            return args.Contains($"-{name}");
+        }
+        
+
+        private static string GetArgValue(string name, string[] args)
+        {
             for (int i = 0; i < args.Length; i++)
             {
                 if (args[i] == $"-{name}" && i + 1 < args.Length)
@@ -172,6 +225,37 @@ namespace Unity.CloudTesting.Editor
             }
 
             return filter;
+        }
+
+        internal class CommandLineArgs
+        {
+            private string _accessToken;
+            public string AccessToken
+            {
+                get => string.IsNullOrEmpty(_accessToken) ? CloudProjectSettings.accessToken : _accessToken;
+                set => _accessToken = value;
+            }
+
+            private BuildTarget? targetPlatform;
+            public BuildTarget TargetPlatform
+            {
+                get => targetPlatform?? EditorUserBuildSettings.activeBuildTarget;
+                set => targetPlatform = value;
+            }
+            
+            private string _uploadfile;
+            public string UploadFile
+            {
+                get => string.IsNullOrEmpty(_uploadfile) ? CloudTestConfig.BuildPath : _uploadfile;
+                set => _uploadfile = value;
+            }
+
+            private string _projectId;
+            public string ProjectId
+            {
+                get => _projectId?? Application.cloudProjectId;
+                set => _projectId = value;
+            }
         }
     }
 }

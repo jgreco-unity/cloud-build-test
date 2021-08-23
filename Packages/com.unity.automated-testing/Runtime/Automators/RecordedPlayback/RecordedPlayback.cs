@@ -90,7 +90,10 @@ namespace Unity.RecordedPlayback
 
         public static T GetRecordingData<T>() where T : BaseRecordingData
         {
-            var text = File.ReadAllText(GetRecordingDataFilePath());
+            string path = GetRecordingDataFilePath();
+            string text = "{}";
+            if (File.Exists(path))
+                text = File.ReadAllText(path);
             return JsonUtility.FromJson<T>(text);
         }
 
@@ -107,6 +110,8 @@ namespace Unity.RecordedPlayback
 
         public static void SetRecordingDataFromFile(string sourcePath)
         {
+            AQALogger logger = new AQALogger();
+
             RecordedPlaybackPersistentData.CleanRecordingData();
             string destPath = Path.Combine(AutomatedQARuntimeSettings.PersistentDataPath, kRecordedPlaybackFilename);
 
@@ -116,7 +121,7 @@ namespace Unity.RecordedPlayback
             }
             else
             {
-                Debug.LogError($"Failed to copy recording file from {sourcePath} to {destPath}");
+                logger.LogError($"Failed to copy recording file from {sourcePath} to {destPath}");
             }
         }
 
@@ -132,6 +137,8 @@ namespace Unity.RecordedPlayback
 
         public static List<string> GetSegmentFiles(string fileName)
         {
+            AQALogger logger = new AQALogger();
+
             try
             {
                 var text = File.ReadAllText(fileName);
@@ -141,7 +148,7 @@ namespace Unity.RecordedPlayback
             }
             catch (ArgumentException)
             {
-                Debug.LogWarning($"{fileName} is not a valid recording json file");
+                logger.LogWarning($"{fileName} is not a valid recording json file");
             }
 
             return new List<string>();
@@ -168,6 +175,8 @@ namespace Unity.RecordedPlayback
 
         public static List<string> CopyRecordingFile(string sourcePath, string destPath)
         {
+            AQALogger logger = new AQALogger();
+
             var createdFiles = new List<string>();
             var destDir = Path.GetDirectoryName(destPath) ?? "";
             if (!string.IsNullOrEmpty(destDir) && !Directory.Exists(destDir))
@@ -176,7 +185,7 @@ namespace Unity.RecordedPlayback
             }
             if (!File.Exists(sourcePath))
             {
-                Debug.LogException(new UnityException($"Required recording file does not exist [{sourcePath}]."), null);
+                logger.LogException(new UnityException($"Required recording file does not exist [{sourcePath}]."));
             }
             File.Copy(sourcePath, destPath, true);
             createdFiles.Add(destPath);
@@ -189,7 +198,7 @@ namespace Unity.RecordedPlayback
                 File.Copy(segmentPath, segmentDest, true);
                 createdFiles.Add(segmentDest);
             }
-            Debug.Log($"Copied recording file from {sourcePath} to {destPath}");
+            logger.Log($"Copied recording file from {sourcePath} to {destPath}");
 
             return createdFiles;
         }

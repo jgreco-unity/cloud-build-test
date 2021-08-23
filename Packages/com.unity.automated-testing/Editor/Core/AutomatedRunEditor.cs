@@ -5,12 +5,15 @@ using UnityEditor;
 using UnityEngine;
 using Unity.AutomatedQA;
 using System.Reflection;
+using Unity.RecordedPlayback;
+using UnityEngine.EventSystems;
 
 namespace Unity.AutomatedQA.Editor
 {
     [CustomEditor(typeof(AutomatedRun))]
     public class AutomatedRunEditor : UnityEditor.Editor
     {
+        private bool IsRunning = false;
         [MenuItem("Automated QA/Experimental/Create Automated Run", priority = AutomatedQAEditorSettings.MenuItems.CreateAutomatedRun)]
         public static void CreateAsset()
         {
@@ -36,18 +39,22 @@ namespace Unity.AutomatedQA.Editor
         {
             base.OnInspectorGUI();
             var run = target as AutomatedRun;
-               
-            EditorGUI.BeginDisabledGroup(Application.isPlaying);
+
+            if (Application.isPlaying && !RecordingInputModule.isWorkInProgress && IsRunning)
+                IsRunning = false;
+
+            EditorGUI.BeginDisabledGroup(IsRunning);
             if (GUILayout.Button("Run"))
             {
+                if (Application.isPlaying)
+                {
+                    CentralAutomationController.Instance.Reset();
+                    StartAutomatedQAFromEditor.runWhileEditorIsAlreadyStarted = true;
+                }
+                ReportingManager.IsPlaybackStartedFromEditorWindow = IsRunning = true;
                 StartAutomatedQAFromEditor.StartAutomatedRun(run);
             }
             EditorGUI.EndDisabledGroup();
-            
-            if (GUILayout.Button("Generate Test"))
-            {
-                AutomatedRunTestCreator.GenerateAutomatedRunTest(AssetDatabase.GetAssetPath(run));
-            }
         }
     }
 

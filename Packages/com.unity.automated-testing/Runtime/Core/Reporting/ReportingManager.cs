@@ -29,18 +29,38 @@ public static class ReportingManager
         }
     }
 
+    public static TestRunData ReportData {
+        get
+        {
+            if (_reportData == null)
+            {
+                InitializeReport();
+            }
+            return _reportData;
+        }
+        set 
+        {
+            _reportData = value;
+        }
+    }
+    private static TestRunData _reportData;
+
     // Serialize CurrentTestName to store name of automated run, which is set before playmode changes.
     [SerializeField]
     public static string CurrentTestName;
+    [SerializeField]
+    public static bool IsPlaybackStartedFromEditorWindow = true;
+    [SerializeField]
+    public static bool IsCrawler;
 
     public static GameObject ReportingMonitorInstance { get; set; }
-    public static TestRunData ReportData { get; set; }
     public static bool IsAutomatorTest { get; set; }
     public static bool IsTestWithoutRecordingFile { get; set; }
     public static bool IsCompositeRecording { get; set; }
     public static string EntryScene { get; set; }
     private static bool Initialized { get; set; }
     private static bool Finalized { get; set; }
+    private static bool HasBeenReset { get; set; }
     private static string _reportSaveDirectory { get; set; }
 
     [Serializable]
@@ -51,6 +71,7 @@ public static class ReportingManager
             Tests = new List<TestData>();
             FpsData = new List<FpsData>();
             AllLogs = new List<Log>();
+            CustomData = new List<CustomReportData>();
         }
         public List<Log> AllLogs;
         public List<FpsData> FpsData;
@@ -64,6 +85,7 @@ public static class ReportingManager
         public string DeviceType;
         public string DeviceModel;
         public List<TestData> Tests;
+        public List<CustomReportData> CustomData;
     }
 
     [Serializable]
@@ -85,6 +107,13 @@ public static class ReportingManager
     }
 
     [Serializable]
+    public class CustomReportData
+    {
+        public string Name;
+        public string Value;
+    }
+
+    [Serializable]
     public class StepData
     {
         public StepData()
@@ -94,6 +123,7 @@ public static class ReportingManager
         }
         public enum ConsoleLogType { Error, Warning, Log }
         public string Name;
+        public string QuerySelector;
         public string ActionType;
         public string Hierarchy;
         public string Scene;
@@ -136,15 +166,25 @@ public static class ReportingManager
     }
 
     /// <summary>
+    /// Reset the ReportingManager for next test.
+    /// </summary>
+    public static void Reset()
+    {
+        ReportData = null;
+        HasBeenReset = true;
+        Initialized = Finalized = false;
+    }
+
+    /// <summary>
     /// Record the current framerate.
     /// </summary>
-    public static void SampleFramerate()
+    public static void SampleFramerate(float avgFps)
     {
         if (ReportData == null)
             return;
         FpsData fpsData = new FpsData();
         fpsData.CurrentStepDataName = ReportData.Tests.Any() && ReportData.Tests.Last().Steps.Any() ? $"{ReportData.Tests.Last().TestName} > [{ReportData.Tests.Last().Steps.Last().ActionType.ToUpper()} {ReportData.Tests.Last().Steps.Last().Hierarchy} > {ReportData.Tests.Last().Steps.Last().Name}]" : string.Empty;
-        fpsData.Fps = Math.Round(1.0f / Time.deltaTime, 0).ToString();
+        fpsData.Fps = Math.Round(avgFps, 0).ToString();
         fpsData.TimeStamp = Math.Round(Time.time, 1).ToString();
         ReportData.FpsData.Add(fpsData);
     }
@@ -176,6 +216,7 @@ public static class ReportingManager
 #else
         ReportData.IsLocalRun = false;
 #endif
+
         ReportData.RunStartTime = DateTime.UtcNow.ToString();
         ReportData.DeviceType = SystemInfo.deviceType.ToString();
         ReportData.DeviceModel = SystemInfo.deviceModel;
@@ -195,7 +236,7 @@ public static class ReportingManager
     /// </summary>
     public static void FinalizeReport()
     {
-        if (!Initialized || Finalized) return;
+        if (!Initialized || Finalized || ReportData == null || !ReportData.Tests.Any()) return;
         if (ReportData.Tests.Last().InProgress)
         {
             FinalizeTestData();
@@ -251,7 +292,12 @@ public static class ReportingManager
 
         // Test was already initialized. Most likely due to errors or logs requiring test data initialization before it would normally be invoked.
         bool isCurrentTestAlreadyInitialized = ReportData.Tests.Any() && ReportData.Tests.FindAll(x => x.TestName == CurrentTestName).Any();
-        if (isCurrentTestAlreadyInitialized || (IsTestWithoutRecordingFile && string.IsNullOrEmpty(CurrentTestName)))
+        // If this is a full generated test, this method will be invoked when empty scenes are loaded between Unity Test Runner test execution. Ignore when that happens.
+        bool isCurrentGameStateReadyForInitialization = IsTestWithoutRecordingFile &&
+            (string.IsNullOrEmpty(CurrentTestName) || 
+            SceneManager.GetActiveScene().name.ToLower().Contains("emptyscene"));
+        if (!IsCrawler && 
+            (isCurrentTestAlreadyInitialized || isCurrentGameStateReadyForInitialization))
             return;
 
         if (ReportData.Tests.Any() && ReportData.Tests.Last().InProgress)
@@ -259,10 +305,11 @@ public static class ReportingManager
             FinalizeTestData();
         }
         TestData recording = new TestData();
-        recording.TestName = CurrentTestName;
+        recording.TestName = IsCrawler ? "Game Crawler" : CurrentTestName;
 
         // Check if the current test is expected to have a json recording file.
         if (!IsTestWithoutRecordingFile && AutomatedQARuntimeSettings.hostPlatform != HostPlatform.Cloud &&
+            (!string.IsNullOrEmpty(recording.TestName) || !string.IsNullOrEmpty(RecordedPlaybackPersistentData.RecordingFileName)) &&
             // CurrentTestName is null/empty if a recording was launched from AutomatedQa editor windows.
             (string.IsNullOrEmpty(CurrentTestName) ? true : RecordedTesting.IsRecordedTest(recording.TestName)))
         {
@@ -285,7 +332,7 @@ public static class ReportingManager
     /// <summary>
     /// Current recording or Unity test is complete. Finalize data in preperation for next test or end of run.
     /// </summary>
-    public static void FinalizeTestData()
+    private static void FinalizeTestData()
     {
         if (ReportData == null || !ReportData.Tests.Any()) return;
         TestData currentRecording = ReportData.Tests.Last();
@@ -365,10 +412,31 @@ public static class ReportingManager
     }
 
     /// <summary>
+    /// Sets a custom key value data in the generated html report.
+    /// </summary>
+    /// <param name="name"></param>
+    /// <param name="value"></param>
+    public static void SetCustomReportData(string name, string value)
+    {
+        InitializeReport();
+        foreach (var data in ReportData.CustomData)
+        {
+            if (data.Name == name)
+            {
+                data.Value = value;
+                return;
+            }
+        }
+        ReportData.CustomData.Add(new CustomReportData{Name = name, Value = value});
+    }
+
+    /// <summary>
     /// Record logs from Unity console and add them to most recently-generated step.
     /// </summary>
-    public static void RecordLog(string message, string stackTrace, LogType type)
+    private static void RecordLog(string message, string stackTrace, LogType type)
     {
+        if (ReportData == null)
+            return;
         message = EncodeCharactersForJson(message);
         bool anyTestsSet = ReportData.Tests.Any();
         bool anyStepsSet = anyTestsSet && ReportData.Tests.Last().Steps.Any();
@@ -433,7 +501,7 @@ public static class ReportingManager
         }
     }
 
-    public static void GenerateXmlReport()
+    private static void GenerateXmlReport()
     {
         GenerateXmlReport(ReportData.Tests, Path.Combine(ReportSaveDirectory, $"{ReportFileNameWithoutExtension}.xml"));
     }
@@ -477,7 +545,7 @@ public static class ReportingManager
         File.WriteAllText(outputPath, xmlReport.ToString());
     }
 
-    public static void GenerateHtmlReport()
+    private static void GenerateHtmlReport()
     {
         StringBuilder report = new StringBuilder();
         report.AppendLine(TestRunReportHtmlManifest.TEST_RUN_REPORT_HTML_TEMPLATE);
@@ -513,7 +581,7 @@ public static class ReportingManager
     /// </summary>
     /// <param name="val"></param>
     /// <returns></returns>
-    public static string EncodeCharactersForJson(string val)
+    private static string EncodeCharactersForJson(string val)
     {
         if (string.IsNullOrEmpty(val))
         {
@@ -552,5 +620,10 @@ public static class ReportingManager
             result = result.Replace(EncodingKeys[x].character, EncodingKeys[x].encoding);
         }
         return result;
+    }
+
+    public static bool IsReportingFinished()
+    {
+        return HasBeenReset || (Finalized && ReportingMonitorInstance == null);
     }
 }

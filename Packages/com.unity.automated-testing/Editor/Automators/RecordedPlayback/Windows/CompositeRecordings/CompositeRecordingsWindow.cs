@@ -22,7 +22,7 @@ namespace Unity.RecordedPlayback.Editor
             listView.onItemChosen += callback;
 #endif
         }
-        
+
         public static void SubscribeOnSelectionChanged(this ListView listView, Action<IEnumerable<object>> callback)
         {
 #if UNITY_2020_1_OR_NEWER
@@ -43,8 +43,8 @@ namespace Unity.RecordedPlayback.Editor
         }
 
     }
-    
-    public class CompositeRecordingsWindow: EditorWindow
+
+    public class CompositeRecordingsWindow : EditorWindow
     {
         private static DateTime lastRefresh = DateTime.Now;
         private string BasePath = "Packages/com.unity.automated-testing/Editor/Automators/RecordedPlayback/Windows/CompositeRecordings/";
@@ -58,8 +58,8 @@ namespace Unity.RecordedPlayback.Editor
         private List<string> recordingsToCombine = new List<string>();
         // TODO: Add back the rename button
         // private List<string> recordingRowButtonNames = new List<string>{ "play", "edit", "find" };
-        private List<string> recordingRowButtonNames = new List<string>{ "play", "find" };
-        private List<string> renameRecordingButtonNames = new List<string>{ "save", "cancel" };
+        private List<string> recordingRowButtonNames = new List<string> { "play", "find" };
+        private List<string> renameRecordingButtonNames = new List<string> { "save", "cancel" };
 
         private ListView RecordingListView;
 
@@ -80,7 +80,7 @@ namespace Unity.RecordedPlayback.Editor
         private Vector2 scrollPos = Vector2.zero;
         private Dictionary<string, string> fileRenames = new Dictionary<string, string>();
 
-        [MenuItem("Automated QA/Experimental/Composite Recordings...", priority=AutomatedQAEditorSettings.MenuItems.CompositeRecordings)]
+        //[MenuItem("Automated QA/Experimental/Composite Recordings...", priority = AutomatedQAEditorSettings.MenuItems.CompositeRecordings)]
         public static void ShowWindow()
         {
             CompositeRecordingsWindow wnd = GetWindow<CompositeRecordingsWindow>();
@@ -98,21 +98,21 @@ namespace Unity.RecordedPlayback.Editor
             VisualElement root = rootVisualElement;
             // VisualElements objects can contain other VisualElement following a tree hierarchy.
             var visualTree =
-                AssetDatabase.LoadAssetAtPath<VisualTreeAsset>(BasePath + WINDOW_NAME +".uxml");
+                AssetDatabase.LoadAssetAtPath<VisualTreeAsset>(BasePath + WINDOW_NAME + ".uxml");
             visualTree.CloneTree(root);
             // A stylesheet can be added to a VisualElement and will be applied to all its children
             var styleSheet = AssetDatabase.LoadAssetAtPath<StyleSheet>(BasePath + WINDOW_NAME + ".uss");
             root.styleSheets.Add(styleSheet);
-            
+
             rootVisualElement.Q(COMPOSITE_PANEL).style.display = DisplayStyle.None;
 
             SetupControls();
             SetupViews();
-            
+
             rootVisualElement.Q<VisualElement>("RecordingsList").Add(RecordingListView);
         }
-        
-/* START Recording Management Buttons */
+
+        /* START Recording Management Buttons */
         private void SetupControls()
         {
             // Asset path reference in uxml
@@ -125,17 +125,17 @@ namespace Unity.RecordedPlayback.Editor
             Button reportButton = rootVisualElement.Q<Button>("ReportButton");
             Button saveSegmentButton = rootVisualElement.Q<Button>("SaveButton");
             Button endButton = rootVisualElement.Q<Button>("EndButton");
-            
+
             // Button element references from CompositeRecordingsPanel in uxml
             Button combineButton = rootVisualElement.Q<Button>("OpenCompositeButton");
             Button closeCombineButton = rootVisualElement.Q<Button>("CloseCompositeButton");
             Button saveCombineButton = rootVisualElement.Q<Button>("SaveCombineButton");
             Button playContinueButton = rootVisualElement.Q<Button>("PlayAndContinueButton");
-            
+
             var recordingListContainer = rootVisualElement.Q("CompositeRecordingList");
             Button addButton = rootVisualElement.Q<Button>("AddCompositeButton");
             Button deleteButton = rootVisualElement.Q<Button>("DeleteCompositeButton");
-            
+
             List<Button> recordingStateBtns = new List<Button>()
             {
                 saveSegmentButton,
@@ -208,13 +208,13 @@ namespace Unity.RecordedPlayback.Editor
             RecordedPlaybackController.Instance.SaveRecordingSegment();
             SetupViews();
         }
-        
+
         private void HandleEndClick(Button recordButton, Button reportButton, List<Button> recordingStateBtns)
         {
             reportButton.style.display = recordButton.style.display = DisplayStyle.Flex;
             recordButton.text = "RECORD";
             BulkButtonDisplayUpdate(recordingStateBtns, DisplayStyle.None);
-            EditorApplication.ExitPlaymode(); 
+            EditorApplication.ExitPlaymode();
             EditorApplication.isPlaying = false;
         }
 
@@ -228,7 +228,7 @@ namespace Unity.RecordedPlayback.Editor
         private void SetupViews()
         {
             recordingPaths = GetAllRecordingAssetPaths();
-            
+
             if (RecordingListView != null)
             {
                 RecordingListView.itemsSource = recordingPaths;
@@ -241,7 +241,7 @@ namespace Unity.RecordedPlayback.Editor
         }
 
 
-        
+
         private void SetupRecordingsListView()
         {
             // The ListView object will invoke the "makeItem" function for each items (specified as path[i])
@@ -276,7 +276,7 @@ namespace Unity.RecordedPlayback.Editor
                 UpdateRecordingsToCombine(selectedFileName);
                 SetupViews();
             });
-            
+
             RecordingListView.SubscribeOnSelectionChanged(objects =>
             {
                 SetupViews();
@@ -286,7 +286,7 @@ namespace Unity.RecordedPlayback.Editor
                 {
                     newCount++;
                 }
-                if ( prevCount > newCount || prevCount < newCount || prevCount == newCount)
+                if (prevCount > newCount || prevCount < newCount || prevCount == newCount)
                 {
                     recordingsToCombine.Clear();
                 }
@@ -339,7 +339,7 @@ namespace Unity.RecordedPlayback.Editor
             var capitalizedName = StringExtensions.FirstCharToUpper(name);
             var toolTipText = isEdit ? "Rename" : capitalizedName;
             var rowButton = new Button();
-            
+
             rowButton.name = $"{capitalizedName}RecordingButton";
             rowButton.text = isEdit ? "RENAME" : name.ToUpper();
             rowButton.tooltip = $"{toolTipText} Recording";
@@ -360,7 +360,7 @@ namespace Unity.RecordedPlayback.Editor
                 buttonIcon.AddToClassList($"{capitalizedName}Img");
                 rowButton.Add(buttonIcon);
             }
-            
+
             return rowButton;
         }
         private bool IsEditButton(string name) => name == "edit";
@@ -404,7 +404,7 @@ namespace Unity.RecordedPlayback.Editor
                 AddRecordingRowButtons(rowContainer, renameRecordingButtonNames);
                 var saveRenameButton = rowContainer.Q<Button>("SaveRecordingButton");
                 var cancelRenameButton = rowContainer.Q<Button>("CancelRecordingButton");
-                
+
                 // Show or Hide Row Buttons for Rename
                 ToggleRenameButtons(rowContainer);
 
@@ -413,7 +413,7 @@ namespace Unity.RecordedPlayback.Editor
                 {
                     renamedFile = element.newValue;
                 });
-                
+
                 saveRenameButton.clickable.clicked += () =>
                 {
                     var DIALOG_MSG = $"{RENAME_DIALOG_MSG} from {recordingFilePath} to {renamedFile}?";
@@ -444,7 +444,7 @@ namespace Unity.RecordedPlayback.Editor
                     CancelSaveRenameFile(recordingFilePath);
                     rowContainer.Remove(rowContainer.Q<TextField>("RenameTextField"));
                     currentLabel.style.display = DisplayStyle.Flex;
-                    
+
                     ToggleRenameButtons(rowContainer);
                     SetupViews();
                 };
@@ -481,28 +481,29 @@ namespace Unity.RecordedPlayback.Editor
         {
             var playButton = rowContainer.Q<Button>("PlayRecordingButton");
             var findButton = rowContainer.Q<Button>("FindRecordingButton");
-//            var renameButton = rowContainer.Q<Button>("EditRecordingButton");
+            //            var renameButton = rowContainer.Q<Button>("EditRecordingButton");
 
-            List<Button> buttons = new List<Button> {playButton, findButton};
+            List<Button> buttons = new List<Button> { playButton, findButton };
             BulkButtonDisplayUpdate(buttons, style);
         }
         private void UpdateRenameButtonsDisplayStyle(VisualElement rowContainer, DisplayStyle style)
         {
             var saveRenameButton = rowContainer.Q<Button>("SaveRecordingButton");
             var cancelRenameButton = rowContainer.Q<Button>("CancelRecordingButton");
-            
+
             List<Button> buttons = new List<Button> { cancelRenameButton, saveRenameButton };
             BulkButtonDisplayUpdate(buttons, style);
         }
 
-        private List<string> GetTemporarySegmentFiles() {
+        private List<string> GetTemporarySegmentFiles()
+        {
             List<string> segments = new List<string>();
             string[] files = Directory.GetFiles(AutomatedQARuntimeSettings.PersistentDataPath);
             int index = 0;
-            foreach(string file in files)
+            foreach (string file in files)
             {
                 string filename = file.Split(Path.DirectorySeparatorChar).Last();
-                if (filename.StartsWith("recording_segment")) 
+                if (filename.StartsWith("recording_segment"))
                 {
                     segments = segments.Prepend($"Assets/{ AutomatedQARuntimeSettings.RecordingFolderName}/pending_segment_file_{++index}.json");
                 }
@@ -513,8 +514,8 @@ namespace Unity.RecordedPlayback.Editor
         private List<string> GetAllRecordingAssetPaths()
         {
             AssetDatabase.Refresh();
-            var assets = AssetDatabase.FindAssets("*", new[] {$"{AutomatedQARuntimeSettings.RecordingFolderNameWithAssetPath}"}).ToList();
-            var results = new List<string>();           
+            var assets = AssetDatabase.FindAssets("*", new[] { $"{AutomatedQARuntimeSettings.RecordingFolderNameWithAssetPath}" }).ToList();
+            var results = new List<string>();
             for (int i = 0; i < assets.Count; i++)
             {
                 var assetPath = AssetDatabase.GUIDToAssetPath(assets[i]);
@@ -523,7 +524,7 @@ namespace Unity.RecordedPlayback.Editor
                     results.Add(assetPath);
                 }
             }
-            results.Sort((a, b) => Convert.ToInt32((File.GetCreationTime(b) - File.GetCreationTime(a) ).TotalSeconds));
+            results.Sort((a, b) => Convert.ToInt32((File.GetCreationTime(b) - File.GetCreationTime(a)).TotalSeconds));
             // Add temporary segments to list as they are saved.
             if (Application.isPlaying || RecordedPlaybackPersistentData.GetRecordingMode() == RecordingMode.Record)
             {
@@ -531,23 +532,23 @@ namespace Unity.RecordedPlayback.Editor
             }
             return results;
         }
-/* END Recording View */
+        /* END Recording View */
 
-/* START Composite View */
+        /* START Composite View */
         private void SetupComposite()
         {
             var numberRecordingsToCombine = recordingsToCombine.Count;
             var Container = rootVisualElement.Q("CompositeRecordingList");
             Container.Clear();
-            
+
             var numberCompositeRecordings = rootVisualElement.Q<IntegerField>("NumberCompositeRecordings");
             var addButton = rootVisualElement.Q<Button>("AddCompositeButton");
             var deleteButton = rootVisualElement.Q<Button>("DeleteCompositeButton");
-            var compositePrePopulatedButtonList = new List<Button> {addButton, deleteButton};
+            var compositePrePopulatedButtonList = new List<Button> { addButton, deleteButton };
 
             // Composite Rows
             CreatePrePopulatedCompositeRows(Container, recordingsToCombine);
-            
+
             // Hide size input, Show Add/Remove Buttons
             numberCompositeRecordings.style.display = DisplayStyle.None;
             BulkButtonDisplayUpdate(compositePrePopulatedButtonList, DisplayStyle.Flex);
@@ -567,7 +568,7 @@ namespace Unity.RecordedPlayback.Editor
         private void CreatePrePopulatedCompositeRows(VisualElement Container, List<string> recordings)
         {
             var rowCount = Container.childCount;
-            for (var i = 0; i < recordings.Count ; i++)
+            for (var i = 0; i < recordings.Count; i++)
             {
                 var currRecording = recordings[i];
                 var asset = AssetDatabase.LoadMainAssetAtPath($"{AutomatedQARuntimeSettings.RecordingFolderNameWithAssetPath}/" + currRecording);
@@ -599,10 +600,10 @@ namespace Unity.RecordedPlayback.Editor
 
         private string[] RetrievePathFromElementName(string ElementName)
         {
-            string[] defaultArr = {};
+            string[] defaultArr = { };
             if (!string.IsNullOrEmpty(ElementName))
             {
-                string[] elementNameDelimiter = {"cr-"};
+                string[] elementNameDelimiter = { "cr-" };
                 return ElementName.Split(elementNameDelimiter, System.StringSplitOptions.RemoveEmptyEntries);
             }
             else
@@ -615,12 +616,12 @@ namespace Unity.RecordedPlayback.Editor
             var rowCount = Container.childCount;
             for (var i = 0; i < num; i++)
             {
-                ObjectField newCompositeField = new ObjectField() {objectType = typeof(TextAsset)};
+                ObjectField newCompositeField = new ObjectField() { objectType = typeof(TextAsset) };
                 newCompositeField.RegisterValueChangedCallback(field =>
                 {
                     var selectedElement = rootVisualElement.Q<ObjectField>(newCompositeField.name);
                     var selectedRecordingPath = selectedElement.Q<Label>().text;
-                    
+
                     int index = recordingsToCombine.IndexOf(selectedRecordingPath);
                     if (index == -1)
                     {
@@ -672,7 +673,7 @@ namespace Unity.RecordedPlayback.Editor
         {
             RecordingInputModule.InputModuleRecordingData recordingDataInstance = new RecordingInputModule.InputModuleRecordingData();
             recordingDataInstance.recordingType = RecordingInputModule.InputModuleRecordingData.type.composite;
-                
+
             foreach (var recording in recordingsToCombine)
             {
                 var fileName = SanitizeRecordingName(recording);
@@ -690,12 +691,12 @@ namespace Unity.RecordedPlayback.Editor
                     var segment = RecordingInputModule.InputModuleRecordingData.FromFile(segmentPath);
                     recordingDataInstance.entryScene = segment.entryScene;
                 }
-                
+
                 recordingDataInstance.AddRecording(fileName);
             }
             recordingDataInstance.AddPlaybackCompleteEvent();
             recordingDataInstance.SaveToFile(newFilePath);
-                
+
             var alertContainer = rootVisualElement.Q<VisualElement>("HelpBox");
             var message = $"Composite recording successfully created at: {newFilePath}. Note: there may be a short delay (<1min) before your new file appears";
             CreateIMGUIHelpBox(alertContainer, message, MessageType.Info);
@@ -720,9 +721,9 @@ namespace Unity.RecordedPlayback.Editor
                 ContinueCompositeRecording();
             }
         }
-/* END Composite View */
+        /* END Composite View */
 
-/* START GUI & State Updates */
+        /* START GUI & State Updates */
         private void Update()
         {
             switch (state)
@@ -759,15 +760,14 @@ namespace Unity.RecordedPlayback.Editor
         }
         private void UpdateStateRecordPlayControls()
         {
-            if (playModeStartedFromHere && 
+            if (playModeStartedFromHere &&
                 EditorApplication.isPlaying &&
-                RecordedPlaybackController.Exists() && 
-                RecordedPlaybackPersistentData.GetRecordingMode() == RecordingMode.Playback &&
-                RecordedPlaybackController.Instance.IsPlaybackCompleted())
+                RecordedPlaybackController.IsPlaybackCompleted() &&
+                RecordedPlaybackPersistentData.GetRecordingMode() == RecordingMode.Playback)
             {
                 EditorApplication.isPlaying = false;
             }
-            
+
             // poll for state change
             if (EditorApplication.isPlaying && !isPlayMode)
             {
@@ -830,23 +830,23 @@ namespace Unity.RecordedPlayback.Editor
             EditorGUILayout.EndVertical();
 
         }
-/* END GUI & State Updates */
+        /* END GUI & State Updates */
 
-/* START Recording Mode Controls */
+        /* START Recording Mode Controls */
         private void GUIStateRecordPlayControls()
         {
             // Check & update button state 
             var windowStyle = new GUIStyle(GUIStyle.none);
-            windowStyle.margin = new RectOffset(5,5,5,5);
+            windowStyle.margin = new RectOffset(5, 5, 5, 5);
             scrollPos = EditorGUILayout.BeginScrollView(scrollPos, windowStyle);
-            
+
             EditorGUILayout.EndScrollView();
         }
         private void PlayRecording(string recordingFilePath)
         {
             isPlayMode = false;
             playModeStartedFromHere = true;
-            StartRecordedPlaybackFromEditor.EnterPlaymodeAndPlay(recordingFilePath);
+            StartRecordedPlaybackFromEditor.StartPlayback(recordingFilePath);
         }
         void OnEnterPlaymode()
         {
@@ -863,15 +863,16 @@ namespace Unity.RecordedPlayback.Editor
                 saveSegmentButton,
                 endButton
             };
-            
+
             BulkButtonDisplayUpdate(recordingStateBtns, DisplayStyle.None);
             recordButton.style.display = DisplayStyle.Flex;
-            if (ReportingManager.DoesReportExist(ReportingManager.ReportType.Html)) {
+            if (ReportingManager.DoesReportExist(ReportingManager.ReportType.Html))
+            {
                 reportButton.style.display = DisplayStyle.Flex;
                 reportButton.clickable.clicked += () => { HandleOpenHtmlReportClick(); };
                 reportButton.SetEnabled(true);
             }
-            
+
             if (playModeStartedFromHere)
             {
                 if (RecordedPlaybackPersistentData.GetRecordingMode() == RecordingMode.Record ||
@@ -879,10 +880,10 @@ namespace Unity.RecordedPlayback.Editor
                 {
                     RecordedPlaybackEditorUtils.SaveCurrentRecordingDataAsProjectAsset();
                 }
-                
+
                 RecordedPlaybackPersistentData.SetRecordingMode(RecordingMode.None);
             }
-            
+
             playModeStartedFromHere = false;
             SetupViews();
         }
@@ -890,7 +891,7 @@ namespace Unity.RecordedPlayback.Editor
         {
             isPlayMode = false;
             playModeStartedFromHere = true;
-            StartRecordedPlaybackFromEditor.EnterPlaymodeAndRecord();
+            StartRecordedPlaybackFromEditor.StartRecording();
         }
 
         private void ContinueCompositeRecording()
@@ -899,9 +900,9 @@ namespace Unity.RecordedPlayback.Editor
             playModeStartedFromHere = true;
             StartRecordedPlaybackFromEditor.EnterExtendModeAndRecord();
         }
-/* END Recording Mode Controls */
+        /* END Recording Mode Controls */
 
-/* START UIElement Utility Methods */
+        /* START UIElement Utility Methods */
         private void BulkButtonDisplayUpdate(List<Button> buttons, DisplayStyle style)
         {
             foreach (var button in buttons)
@@ -944,6 +945,6 @@ namespace Unity.RecordedPlayback.Editor
                 }
             }
         }
-/* END  UIElement Utility Methods */
+        /* END  UIElement Utility Methods */
     }
 }

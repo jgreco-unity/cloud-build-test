@@ -11,6 +11,8 @@ namespace Unity.AutomatedQA
         [Serializable]
         public class RunConfig
         {
+            public bool quitOnFinish = false;
+
             [SerializeReference]
             public List<AutomatorConfig> automators = new List<AutomatorConfig>();
         }

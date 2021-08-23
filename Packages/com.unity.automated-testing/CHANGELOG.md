@@ -5,12 +5,50 @@ All notable changes to this package will be documented in this file.
 The format is based on [Keep a Changelog](http://keepachangelog.com/en/1.0.0/)
 and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## Unreleased
+
+### Major Features and Improvements
+
+### Major Features and Improvements
+- Added `RecordableInput` class that can be used as a drop in replacement for the [Input](https://docs.unity3d.com/ScriptReference/Input.html) class that works with recorded playback. Currently only mouse clicks and touch data are supported but pass-through methods are provided for the remaining functionality for ease of use.
+
+### Bug Fixes and Minor Changes
+- Added support for custom report data.
+- Rewrote Recorded Playback editor window in new UIElement logic.
+	- Redesigned look of window.
+	- Added GameCrawler "Crawl" button to window, which executes a default crawl and generates a recording json file.
+
+## [0.6.1] - 2021-08-11
+
+### Major Features and Improvements
+- Added experimental Staged Run feature for grouped test generation. (Assets > Create > Automated QA > Experimental > Staged Run)
+- New GameElement and ElementQuery classes for reliably finding GameObjects, no matter where they are moved in a scene.
+	- Uses Xpath & JQuery-like query string selectors for identifying GameObjects.
+- New Driver class that allows for much simpler ways to write custom code and perform actions on objects (ex: `Driver.Perform.Click("#SubmitButton")`).
+- Added GameCrawler that allows users to create an AutomatedRun that plays randomly through a game, recording warnings, errors, and notifying users when and where it gets stuck.
 
 ### Bug Fixes and Minor Changes
 - Reverting change that removed the ability to generate "Simple Tests", which is a test that points to a recording file.
 - Fixed an issue with temp directories not being properly deleted.
 - Adding FPS tracking to reports. FPS sampled over duration of test execution is displayed in a graph accessible from the html report (FPS Data button).
+- Fixed issue allowing objects off screen to be interacted with.
+- Add support for recording right and middle mouse clicks.
+- Added functionality to allow both recording and playback while editor is in play mode.
+	- Both record & playback can be done repeatedly in the same session.
+	- Editor does not stop playmode on completion, but both record & playback can still be started outside of playmode.
+- Added support for running cloud tests from the command line using `BuildAndRunTests`.
+- Fixed issue where tests may timeout during command line batch mode runs.
+- Fixed issue with the InputField text listener not being added right away.
+- Screenshot timing after each playback action completes is now configurable in settings.
+- Exposed "Quit on finish" in Automated Run Config.
+- Added ability to generate a "Full" test from Automated Runs.
+- Added settings for log level.
+- Added support for TextMeshPro TMP_InputFields and TMP_Text fields
+	- Can record and playback input into TMP_InputFields, and find objects in ElementQuery by TMP_InputField & TMP_Text text content.
+
+### Breaking changes
+- Several APIs were moved from the test base class to Driver.cs. "Full" generated tests from v0.5.0 will need their PerformAction and RegisterStep method invocations updated.
+- The experimental Composite Recordings window has been removed. Instead, Automated Runs can be used to playback multiple recordings in sequence. 
 
 ## [0.5.0] - 2021-06-24
 

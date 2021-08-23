@@ -2,7 +2,8 @@ using System;
 using System.Collections.Generic;
 using UnityEngine.Networking;
 using UnityEngine;
-    
+using System.Text;
+
 namespace Unity.AutomatedQA
 {
 
@@ -159,15 +160,6 @@ namespace Unity.AutomatedQA
             }
         }
 
-        public static bool IsError(this UnityWebRequest uwr)
-        {
-#if UNITY_2020_1_OR_NEWER
-            return uwr.result != UnityWebRequest.Result.Success;
-#else
-            return uwr.isNetworkError || uwr.isHttpError;
-#endif
-        }
-
         public static List<T> GetUniqueObjectsBetween<T>(this List<T> thisList, List<T> otherList)
         {
             List<T> unique = new List<T>();
@@ -187,6 +179,90 @@ namespace Unity.AutomatedQA
             }
             return unique;
         }
-    }
 
+        public static T Random<T>(this List<T> list)
+        {
+          System.Random r = new System.Random((int)Time.time);
+          if (!list.Any())
+            {
+                throw new UnityException("List provided to AutomatedQATools.Last() was empty. Cannot invoke Last() on an empty list. Check for list being empty before invoking Last().");
+            }
+            return list[r.Next(0, list.Count - 1)];
+        }
+
+        public static bool IsError(this UnityWebRequest uwr)
+        {
+#if UNITY_2020_1_OR_NEWER
+            return uwr.result != UnityWebRequest.Result.Success;
+#else
+            return uwr.isNetworkError || uwr.isHttpError;
+#endif
+        }
+
+        static char[] alphaNumerics = { 'a', 'A', 'b', 'B', 'c', 'C', 'd', 'D', 'e', 'E', 'f', 'F', 'g', 'G', 'h', 'H', 'i', 'I', 'j', 'J', 'k', 'K', 'l', 'L', 'm', 'M', 'n', 'N', 'o', 'O', 'p', 'P', 'q', 'Q', 'r', 'R', 's', 'S', 't', 'T', 'u', 'U', 'v', 'V', 'w', 'W', 'x', 'X', 'y', 'Y', 'z', 'Z', '0', '1', '2', '3', '4', '5', '6', '7', '8', '9' };
+        static char[] nonAlphaNumerics = { '@', '#', '^', '&', '(', ')', '+' };
+        public static string RandomString(int length, bool alphaNumericOnly = false, bool isPassword = false)
+        {
+            System.Random random = new System.Random();
+            List<char> useChars = new List<char>();
+            if (!alphaNumericOnly)
+            {
+                useChars.AddRange(nonAlphaNumerics);
+            }
+            useChars.AddRange(alphaNumerics);
+            StringBuilder randomString = new StringBuilder();
+            if (isPassword)
+            {
+                if (length < 8)
+                {
+                    return string.Empty;
+                }
+                //If this is a password, these must be satisfied.
+                bool hasCapitalLetter = false;
+                bool hasLowercaseLetter = false;
+                bool hasNumber = false;
+                bool hasSpecialChar = false;
+
+                for (int c = 0; c < length; c++)
+                {
+                    List<char> LimitedSet = new List<char>();
+                    if (!hasCapitalLetter)
+                    {
+                        LimitedSet = useChars.FindAll(x => char.IsUpper(x));
+                        randomString.Append(LimitedSet[random.Next(0, LimitedSet.Count - 1)]);
+                        hasCapitalLetter = true;
+                    }
+                    else if (!hasLowercaseLetter)
+                    {
+                        LimitedSet = useChars.FindAll(x => !char.IsUpper(x));
+                        randomString.Append(LimitedSet[random.Next(0, LimitedSet.Count - 1)]);
+                        hasLowercaseLetter = true;
+                    }
+                    else if (!hasNumber)
+                    {
+                        LimitedSet = useChars.FindAll(x => char.IsDigit(x));
+                        randomString.Append(LimitedSet[random.Next(0, LimitedSet.Count - 1)]);
+                        hasNumber = true;
+                    }
+                    else if (!hasSpecialChar && !alphaNumericOnly)
+                    {
+                        randomString.Append(nonAlphaNumerics[random.Next(0, nonAlphaNumerics.Length - 1)]);
+                        hasSpecialChar = true;
+                    }
+                    else
+                    {
+                        randomString.Append(useChars[random.Next(0, useChars.Count - 1)]);
+                    }
+                }
+            }
+            else
+            {
+                for (int c = 0; c < length; c++)
+                {
+                    randomString.Append(useChars[random.Next(0, useChars.Count - 1)]);
+                }
+            }
+            return randomString.ToString();
+        }
+    }
 }

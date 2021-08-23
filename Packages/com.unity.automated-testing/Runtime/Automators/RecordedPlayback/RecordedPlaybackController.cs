@@ -1,4 +1,5 @@
-﻿using System.Collections;
+using System;
+using System.Collections;
 using System.Collections.Generic;
 using System.IO;
 using Unity.AutomatedQA;
@@ -12,7 +13,9 @@ namespace Unity.RecordedPlayback
     public class RecordedPlaybackController : MonoBehaviour
     {
         private RecordingInputModule inputModule = null;
-        private bool initialized = false;
+        private AQALogger logger;
+
+        public static bool Initialized { get; private set; }
 
         private static RecordedPlaybackController _instance = null;
         public static RecordedPlaybackController Instance
@@ -31,20 +34,25 @@ namespace Unity.RecordedPlayback
             }
         }
 
+        private void Awake()
+        {
+            logger = new AQALogger();
+        }
+
         public void Begin()
         {
-            if (initialized)
+            if (Initialized)
             {
                 return;
             }
 
-            initialized = true;
+            Initialized = true;
 
             if (!ReportingManager.IsTestWithoutRecordingFile && RecordedPlaybackPersistentData.GetRecordingMode() == RecordingMode.Playback && !File.Exists(RecordedPlaybackPersistentData.GetRecordingDataFilePath()))
             {
-                Debug.LogError($"Recorded Playback file does not exist.");
+                logger.LogError($"Recorded Playback file does not exist.");
                 return;
-            } 
+            }
 
             if (inputModule == null)
             {
@@ -52,7 +60,7 @@ namespace Unity.RecordedPlayback
             }
             if (RecordedPlaybackPersistentData.GetRecordingMode() == RecordingMode.Record)
             {
-                gameObject.AddComponent<KeyInputHandler>();
+                gameObject.AddComponent<GameListenerHandler>();
             }
             SetEventSystem();
             VisualFxManager.SetUp(Instance.transform);
@@ -60,13 +68,23 @@ namespace Unity.RecordedPlayback
 
         public void Reset()
         {
-            Destroy(gameObject);
             _instance = null;
-        }
-
-        public bool IsPlaybackCompleted()
-        {
-            return inputModule != null && inputModule.IsPlaybackCompleted();
+            Initialized = false;
+            if (ReportingManager.IsPlaybackStartedFromEditorWindow)
+            {
+                GameObject inputObj = new List<GameObject>(FindObjectsOfType<GameObject>()).Find(x =>
+                    x != gameObject && x.GetComponent<BaseInputModule>() && x.GetComponent<EventSystem>());
+                if (inputObj != null)
+                {
+                    EventSystem gameEventSystem = inputObj.GetComponent<EventSystem>();
+                    if (RecordingInputModule.Instance != null)
+                        RecordingInputModule.Instance.GetComponent<EventSystem>().enabled = false;
+                    gameEventSystem.enabled = true;
+                    inputObj.GetComponent<BaseInputModule>().enabled = true;
+                    EventSystem.current = inputObj.GetComponent<EventSystem>();
+                }
+            }
+            DestroyImmediate(gameObject);
         }
 
         public void SaveRecordingSegment()
@@ -97,9 +115,24 @@ namespace Unity.RecordedPlayback
             return _instance != null;
         }
 
+        public static bool IsPlaybackActive()
+        {
+            return Exists() && _instance.inputModule.IsPlaybackActive();
+        }
+
+        public static bool IsPlaybackCompleted()
+        {
+            return Exists() && _instance.inputModule.IsPlaybackCompleted();
+        }
+
+        public static bool IsRecordingActive()
+        {
+            return Exists() && _instance.inputModule.RecordingMode == RecordingMode.Record;
+        }
+
         public bool IsInitialized()
         {
-            return initialized;
+            return Initialized;
         }
 
         /// <summary>
@@ -109,7 +142,7 @@ namespace Unity.RecordedPlayback
         /// </summary>
         void SetEventSystem()
         {
-            if (!initialized)
+            if (!Initialized)
             {
                 return;
             }
@@ -120,7 +153,7 @@ namespace Unity.RecordedPlayback
                     x != gameObject && x.GetComponent<BaseInputModule>() && x.GetComponent<EventSystem>());
                 if (inputObj == null)
                 {
-                    Debug.Log("No existing Event System & Input Module was found");
+                    logger.Log("No existing Event System & Input Module was found");
                     return;
                 }
 

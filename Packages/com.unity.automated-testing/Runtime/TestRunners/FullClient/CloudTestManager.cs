@@ -12,6 +12,8 @@ namespace Unity.RecordedTesting
     {
         private Dictionary<string, Counter> _testResults = new Dictionary<string, Counter>();
         static object _mutex = new object();
+        
+        private AQALogger logger = new AQALogger();
 
         private static CloudTestManager _instance;
         public static CloudTestManager Instance => _instance ?? (_instance = new CloudTestManager());
@@ -185,10 +187,12 @@ namespace Unity.RecordedTesting
 
         public static void UploadCounters(DeviceFarmOverrides dfConfOverrides = null)
         {
+            AQALogger logger = new AQALogger();
+
             var testResults = CloudTestManager.Instance.GetTestResults(dfConfOverrides);
-            Debug.Log($"Uploading counters {testResults.ToString()}");
+            logger.Log($"Uploading counters {testResults.ToString()}");
             var postUrl = $"{AutomatedQARuntimeSettings.DEVICE_TESTING_API_ENDPOINT}/v1/counters";
-            Debug.Log($"Counters = {testResults}");
+            logger.Log($"Counters = {testResults}");
             byte[] counterPayload = GetBytes(testResults);
             UploadHandlerRaw uH = new UploadHandlerRaw(counterPayload);
             uH.contentType = "application/json";
@@ -205,11 +209,11 @@ namespace Unity.RecordedTesting
 
                 if (uwr.IsError())
                 {
-                    Debug.LogError($"Couldn't upload counters. Error - {uwr.error}");
+                    logger.LogError($"Couldn't upload counters. Error - {uwr.error}");
                 }
                 else
                 {
-                    Debug.Log($"Uploaded counters.");
+                    logger.Log($"Uploaded counters.");
                 }
 
             }
@@ -217,6 +221,7 @@ namespace Unity.RecordedTesting
 
         public DeviceFarmConfig GetDeviceFarmConfig(DeviceFarmOverrides dfOverrides = null)
         {
+
             string configPath = Path.Combine(Application.persistentDataPath, deviceFarmConfigFile);
             
             DeviceFarmConfig dfConf;
@@ -229,7 +234,7 @@ namespace Unity.RecordedTesting
             else
             {
                 //TODO: Graceful shutdown with logs.
-                Debug.Log("config.json not found");
+                logger.Log("config.json not found");
                 dfConf = new DeviceFarmConfig();
                 dfConf.testName = "DummyTest";
                 dfConf.packageName = Application.identifier;
@@ -247,7 +252,7 @@ namespace Unity.RecordedTesting
 #endif
             }
 
-            Debug.Log($"Test name - {dfConf.testName}, Config - {dfConf.ToString()}," +
+            logger.Log($"Test name - {dfConf.testName}, Config - {dfConf.ToString()}," +
                       $"Device Model - {dfConf.awsDeviceModel}, Device Name - {dfConf.awsDeviceName}");
             return dfConf;
         }
@@ -278,7 +283,7 @@ namespace Unity.RecordedTesting
         public void SetCounter(string name, Int64 value)
         {
             GetCounter(name).Reset(value);
-            Debug.Log($"Set counter {name} and counters dict is now - {JsonUtility.ToJson(_testResults).ToString()}");
+            logger.Log($"Set counter {name} and counters dict is now - {JsonUtility.ToJson(_testResults).ToString()}");
         }
 
 

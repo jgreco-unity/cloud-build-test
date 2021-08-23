@@ -6,6 +6,7 @@ using UnityEngine;
 using UnityEditor.Build.Reporting;
 using UnityEditor.SceneManagement;
 using UnityEngine.SceneManagement;
+using UnityEngine.TestTools;
 
 namespace Unity.AutomatedQA.EditorTests
 {
@@ -52,10 +53,8 @@ namespace Unity.AutomatedQA.EditorTests
 
         
         /// winPlatformTest
-        /// Builds the player for Windows
-        /// This uses UTR test filtering, which will filter tests by function name. e.g.:
-        /// --extra-utr-arg="--testfilter=win"
         [Test]
+        [UnityPlatform(RuntimePlatform.WindowsEditor)]
         public void winPlatformTest()
         {
             HelperPlatformTest("win");
@@ -63,9 +62,8 @@ namespace Unity.AutomatedQA.EditorTests
         
         /// macPlatformTest
         /// Builds the player for Mac
-        /// This uses UTR test filtering, which will filter tests by function name. e.g.:
-        /// --extra-utr-arg="--testfilter=mac"
         [Test]
+        [UnityPlatform(RuntimePlatform.OSXEditor)]
         public void macPlatformTest()
         {
             HelperPlatformTest("mac");

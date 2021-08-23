@@ -1,32 +1,30 @@
 ﻿using System;
 using System.Collections;
-using System.Collections.Generic;
 using Unity.AutomatedQA;
-using UnityEngine;
 using UnityEngine.SceneManagement;
 
 [Serializable]
 public class LoadSceneAutomatorConfig : AutomatorConfig<LoadSceneAutomator>
 {
-   public string scene = "";
+    public string scene = "";
 }
 
 public class LoadSceneAutomator : Automator<LoadSceneAutomatorConfig>
 {
-   public override void BeginAutomation()
-   {
-      base.BeginAutomation();
+    public override void BeginAutomation()
+    {
+        base.BeginAutomation();
 
-      StartCoroutine(LoadScene());
-   }
+        StartCoroutine(LoadScene());
+    }
 
-   IEnumerator LoadScene()
-   {
-      var op = SceneManager.LoadSceneAsync(config.scene);
-      while (!op.isDone)
-      {
-         yield return null;
-      }
-      EndAutomation();
-   }
+    IEnumerator LoadScene()
+    {
+        var op = SceneManager.LoadSceneAsync(config.scene);
+        while (!op.isDone)
+        {
+            yield return null;
+        }
+        EndAutomation();
+    }
 }

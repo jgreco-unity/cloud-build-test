@@ -1,24 +1,30 @@
 #if UNITY_INCLUDE_TESTS
 using System.Collections;
-using System.IO;
-using UnityEngine;
 using UnityEngine.SceneManagement;
 using UnityEngine.TestTools;
-
+using Unity.AutomatedQA;
+using Unity.RecordedTesting;
+using Unity.RecordedPlayback;
 #if UNITY_EDITOR
 using UnityEditor;
 #endif
 
-namespace Unity.AutomatedQA.TestTools
+namespace GeneratedAutomationTests
 {
     public abstract class AutomatedTestSuite
     {
-        private int sceneCount = 0;
         protected string testName;
 
         [UnitySetUp]
         public virtual IEnumerator Setup()
         {
+#if UNITY_EDITOR
+            if (!playModeStateChangeListenerSet)
+            {
+                playModeStateChangeListenerSet = true;
+                EditorApplication.playModeStateChanged += OnPlayModeStateChanged;
+            }
+#endif
             testName = NUnit.Framework.TestContext.CurrentContext.Test.FullName;
             yield return null;
         }
@@ -30,13 +36,34 @@ namespace Unity.AutomatedQA.TestTools
             {
                 CentralAutomationController.Instance.Reset();
             }
+            if (RecordedPlaybackController.Exists())
+            {
+                RecordedPlaybackController.Instance.Reset();
+            }
 
-            if (RecordedTesting.RecordedTesting.IsRecordedTest(testName))
+            if (RecordedTesting.IsRecordedTest(testName))
             {
                 ReportingManager.CreateMonitoringService();
             }
-            
-            var emptyScene = SceneManager.CreateScene("emptyscene" + sceneCount++);
+
+            int sceneCount = 0;
+            string sceneName = string.Empty;
+            while (true)
+            {
+                bool sceneExists = false;
+                sceneName = "emptyscene" + sceneCount++;
+                for (int x = 0; x < SceneManager.sceneCount; x++)
+                {
+                    if (SceneManager.GetSceneAt(x).name == sceneName)
+                    {
+                        sceneExists = true;
+                    }               
+                }
+                if (!sceneExists)
+                    break;
+            }      
+
+            var emptyScene = SceneManager.CreateScene(sceneName);
             SceneManager.SetActiveScene(emptyScene);
             yield return UnloadScenesExcept(emptyScene.name);
         }
@@ -62,7 +89,7 @@ namespace Unity.AutomatedQA.TestTools
 #if UNITY_EDITOR
             return AssetDatabase.LoadAssetAtPath<AutomatedRun>(assetPath);
 #else
-            return Resources.Load<AutomatedRun>(Path.Combine("AutomatedRuns", resourceName));
+            return UnityEngine.Resources.Load<AutomatedRun>(System.IO.Path.Combine("AutomatedRuns", resourceName));
 #endif
         }
         
@@ -79,7 +106,23 @@ namespace Unity.AutomatedQA.TestTools
             }
 
         }
-    }
 
+        protected void SetCustomReportData(string name, string value)
+        {
+            ReportingManager.SetCustomReportData(name, value);
+        }
+
+#if UNITY_EDITOR
+        // Guarantees that the report is finalized if we are launched tests from the UTR window in the editor.
+        private static bool playModeStateChangeListenerSet = false;
+        public void OnPlayModeStateChanged(PlayModeStateChange state)
+        {
+            if (state == PlayModeStateChange.ExitingPlayMode || state == PlayModeStateChange.EnteredEditMode)
+            {
+                ReportingManager.FinalizeReport();
+            }
+        }
+#endif
+    }
 }
 #endif

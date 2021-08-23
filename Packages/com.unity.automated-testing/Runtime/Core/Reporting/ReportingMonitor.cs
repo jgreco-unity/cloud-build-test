@@ -1,8 +1,12 @@
+using System;
+using System.Collections;
+using Unity.AutomatedQA;
 using Unity.RecordedPlayback;
 using UnityEngine;
 
 public class ReportingMonitor : MonoBehaviour
 {
+    public static ReportingMonitor Instance { get; set; }
     public RecordingMode RecordingMode
     {
         get
@@ -14,6 +18,41 @@ public class ReportingMonitor : MonoBehaviour
         }
     }
     private RecordingMode _recordingMode;
+
+    void Start()
+    {
+        Instance = this;
+        StartCoroutine(TrackFrameRate());
+    }
+
+    float fpsPool = 0;
+    int fpsSamples = 0;
+    private bool trackingFps = false;
+    private IEnumerator TrackFrameRate()
+    {
+        AQALogger logger = new AQALogger();
+        if (trackingFps)
+        {
+            yield return null;
+        }
+        else
+        {
+            trackingFps = true;
+            while (Application.isPlaying)
+            {
+                for (float x = 0; x <= 0.5f; x += Time.deltaTime)
+                {
+                    fpsSamples++;
+                    fpsPool += (float)Math.Round(1.0f / Time.deltaTime, 0);
+                    yield return null;
+                }
+                float framerate = fpsPool / fpsSamples;
+                ReportingManager.SampleFramerate(framerate);
+//                logger.Log($"FPS {framerate} [Time: {Time.time}]");
+                fpsPool = fpsSamples = 0;
+            }
+        }
+    }
 
     /// <summary>
     /// For Windows Store & Android "end state".
@@ -48,9 +87,14 @@ public class ReportingMonitor : MonoBehaviour
     /// </summary>
     private void OnApplicationQuit()
     {
-        if (RecordingMode == RecordingMode.Playback)
+        if (!ReportingManager.IsPlaybackStartedFromEditorWindow && RecordingMode == RecordingMode.Playback)
         {
             ReportingManager.FinalizeReport();
         }
+    }
+
+    public static void Destroy(ReportingMonitor instance) 
+    {
+        Destroy(instance);
     }
 }

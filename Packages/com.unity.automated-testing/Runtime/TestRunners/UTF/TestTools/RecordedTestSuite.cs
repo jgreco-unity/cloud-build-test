@@ -1,17 +1,12 @@
 ﻿#if UNITY_INCLUDE_TESTS
-using NUnit.Framework;
-using System;
 using System.Collections;
 using Unity.AutomatedQA;
-using Unity.AutomatedQA.TestTools;
 using Unity.RecordedPlayback;
+using Unity.RecordedTesting;
 using UnityEngine;
-using UnityEngine.EventSystems;
-using UnityEngine.SceneManagement;
 using UnityEngine.TestTools;
-using static UnityEngine.EventSystems.RecordingInputModule;
 
-namespace Unity.RecordedTesting.TestTools
+namespace GeneratedAutomationTests
 {
     public abstract class RecordedTestSuite : AutomatedTestSuite
     {
@@ -21,6 +16,7 @@ namespace Unity.RecordedTesting.TestTools
             yield return base.Setup();
             
             Screen.sleepTimeout = SleepTimeout.NeverSleep;
+            ReportingManager.IsPlaybackStartedFromEditorWindow = false;
             ReportingManager.InitializeReport();
 
             if (AutomatedQARuntimeSettings.hostPlatform == HostPlatform.Cloud &&
@@ -46,11 +42,7 @@ namespace Unity.RecordedTesting.TestTools
             {
                 yield return null;
             }
-
-        }
-
-        
+        }     
     }
-
 }
 #endif

@@ -156,6 +156,10 @@ namespace Unity.AutomatedQA
         /// <param name="position"></param>
         public void TriggerDragFeedback(bool isEndDrag, Vector3 position)
         {
+            // TODO: When PT-2024 is fixed, delete this check.
+            if (!Application.isEditor)
+                return;
+
             if (!AutomatedQARuntimeSettings.ActivatePlaybackVisualFx ||
                 !AutomatedQARuntimeSettings.ActivateDragFeedbackFx ||
                 (!lastDragInProgress && isEndDrag)) //If a drag is marked as an end drag, but no drag was started, this was invoked by a mouse release on a normal click.
@@ -231,6 +235,7 @@ namespace Unity.AutomatedQA
 
             GameObject square = HighlightSquares[0];
             square.transform.SetParent(highlighterGo.transform);
+            //square.GetComponent<HighlightElement>().Init(target);
 
             RectTransform squareRect = square.GetComponent<RectTransform>();
             squareRect.anchorMin = squareRect.anchorMax = new Vector2(0, 0);
@@ -280,7 +285,7 @@ namespace Unity.AutomatedQA
             {
                 int newAlpha = (int)((maxLife - currentLife) / maxLife * startingAlpha);
                 img.color = new Color32(0, 255, 255, (byte)(newAlpha < 0 ? 0 : newAlpha));
-                yield return new WaitForEndOfFrame();
+                yield return null;
                 currentLife += Time.deltaTime;
             }
             ReturnHighlightSquare(square);
@@ -380,6 +385,8 @@ namespace Unity.AutomatedQA
             square.transform.SetParent(squareObjPoolGo.transform);
             square.SetActive(false);
             square.AddComponent<RectTransform>();
+            //square.AddComponent<HighlightElement>();
+            //square.AddComponent<LineRenderer>();
             RawImage img = square.AddComponent<RawImage>();
             img.raycastTarget = false; // Do not block clicks.
             img.texture = squareTexture2D;

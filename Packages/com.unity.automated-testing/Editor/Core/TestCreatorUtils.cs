@@ -12,7 +12,7 @@ namespace Unity.AutomatedQA.Editor
         private static string GeneratedTestsAssemblyName => "GeneratedTests.asmdef";
         private static string GeneratedTestAssemblyTemplatePath =>
             $"{ScriptTemplatePath}Assembly Definition-GeneratedTests.asmdef.txt";
-        
+
         public static void CreateTestAssemblyFolder()
         {
             EditorUtility.DisplayProgressBar("Generate Tests", "Create Test Assembly Folder", 0);
@@ -31,7 +31,7 @@ namespace Unity.AutomatedQA.Editor
                     GeneratedTestsAssemblyName),
                 content);
         }
-        
+
         public static void CreateTestScriptFolder(string testType)
         {
             EditorUtility.DisplayProgressBar("Generate Tests", "Create Test Script Folder", 0);

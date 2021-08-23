@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using TestPlatforms.Cloud;
 using Unity.AutomatedQA;
 using Unity.AutomatedQA.Editor;
 using Unity.CloudTesting.Editor;
@@ -12,13 +13,19 @@ namespace Unity.RecordedTesting.Editor
 
     public class CloudTestingWindow : EditorWindow
     {
-        public static readonly BuildTarget[] SupportedBuildTargets = { BuildTarget.Android, BuildTarget.iOS };
+        public static readonly string[] SupportedBuildTargets = { BuildTarget.Android.ToString(), BuildTarget.iOS.ToString() };
+        public static ICloudTestClient Client = new CloudTestClient();
 
         private List<string> allCloudTests = new List<string>();
-        private CloudTestPipeline.JobStatusResponse jobStatus = new CloudTestPipeline.JobStatusResponse();
-        private CloudTestPipeline.UploadUrlResponse uploadInfo = new CloudTestPipeline.UploadUrlResponse();
-        private CloudTestPipeline.BundleUpload _bundleUpload = new CloudTestPipeline.BundleUpload();
+        private JobStatusResponse jobStatus = new JobStatusResponse();
+        private UploadUrlResponse uploadInfo = new UploadUrlResponse();
+        private BundleUpload _bundleUpload = new BundleUpload();
         private DateTime lastRefresh = DateTime.UtcNow;
+        private int buildTargetIndex = 0;
+        private BuildTarget originalBuildTarget;
+        private BuildTarget buildTarget;
+        private bool createBuild = false;
+
 
         [MenuItem("Automated QA/Cloud Test Runner...", priority=AutomatedQAEditorSettings.MenuItems.CloudTestRunner)]
         public static void ShowWindow()
@@ -30,6 +37,11 @@ namespace Unity.RecordedTesting.Editor
 
         private void OnEnable()
         {
+            var editorBuildTarget = EditorUserBuildSettings.activeBuildTarget.ToString();
+            if (SupportedBuildTargets.Contains(editorBuildTarget))
+            {
+                buildTargetIndex = Array.IndexOf(SupportedBuildTargets, editorBuildTarget);
+            }
             allCloudTests.Clear();
             var cloudDict = CloudTestPipeline.GetCloudTests();
             foreach (var testlist in cloudDict)
@@ -40,15 +52,10 @@ namespace Unity.RecordedTesting.Editor
 
         private void OnGUI()
         {
-            if (!SupportedBuildTargets.Contains(EditorUserBuildSettings.activeBuildTarget))
-            {
-                GUILayout.Label($"Supported Build Targets: {String.Join(",", SupportedBuildTargets)}");
-                return;
-            }
-
             GUITestList();
             GUILayout.FlexibleSpace();
             GUIEmailUs();
+            GUIPlatformSelect();
             GUIBuild();
 
             GUIRunButton();
@@ -72,20 +79,43 @@ namespace Unity.RecordedTesting.Editor
 
         void GUIEmailUs()
         {
-            if (GUILayout.Button("Please email us at AutomatedQA@unity3d.com for access (if you have not already).", EditorStyles.linkLabel))
+            if (GUILayout.Button("Please email us at AutomatedQA@unity3d.com for information on increasing your usage limit.", EditorStyles.linkLabel))
             {
                 Application.OpenURL("mailto:AutomatedQA@unity3d.com");
             }
         }
 
+        void GUIPlatformSelect()
+        {
+            buildTargetIndex = EditorGUILayout.Popup("Target Platform", buildTargetIndex, SupportedBuildTargets);
+        }
+
         void GUIBuild()
         {
-            _bundleUpload.buildName = $"CloudBundle.{CloudTestPipeline.BuildFileExtension}";
-            if (GUILayout.Button("Build & Upload") && EditorUtility.DisplayDialog("Confirm Build", "Usage of the Unity editor will be blocked until the build process is complete.",
+            var buildTargetStr = SupportedBuildTargets[buildTargetIndex];
+            var msg = "Usage of the Unity editor will be blocked until the build process is complete.";
+            if (buildTargetStr != EditorUserBuildSettings.activeBuildTarget.ToString())
+            {
+                msg += $"\n\nActive build target {EditorUserBuildSettings.activeBuildTarget} does not match the selected target {buildTargetStr} which will increase the compilation time.";
+            }
+            if (GUILayout.Button("Build & Upload") && EditorUtility.DisplayDialog("Confirm Build", msg,
                 "Continue", "Cancel"))
             {
-                _bundleUpload.buildPath = CloudTestPipeline.BuildPath;
+                buildTarget = (BuildTarget) Enum.Parse(typeof(BuildTarget), buildTargetStr);
                 DoBuildAndUpload();
+            }
+        }
+
+        private void Update()
+        {
+            if (createBuild && !EditorApplication.isCompiling)
+            {
+                createBuild = false;
+                PlayerSettings.SetScriptingDefineSymbolsForGroup(BuildTargetGroup.iOS, PlayerSettings.GetScriptingDefineSymbolsForGroup(BuildTargetGroup.iOS));
+                _bundleUpload.buildName = $"CloudBundle{CloudTestConfig.BuildFileExtension}";
+                _bundleUpload.buildPath = CloudTestConfig.BuildPath;
+                CloudTestBuilder.CreateBuild(buildTarget);
+                CloudTestPipeline.testBuildFinished += OnBuildFinish;
             }
         }
 
@@ -131,7 +161,7 @@ namespace Unity.RecordedTesting.Editor
                     Debug.LogError("Job not finished");
                     return;
                 }
-                CloudTestPipeline.GetTestResults(jobStatus.jobId);
+                Client.GetTestResults(jobStatus.jobId);
             }
             EditorGUI.EndDisabledGroup();
         }
@@ -148,15 +178,20 @@ namespace Unity.RecordedTesting.Editor
             }
             lastRefresh = DateTime.UtcNow;
 
-            jobStatus = CloudTestPipeline.GetJobStatus(jobStatus.jobId);
+            jobStatus = Client.GetJobStatus(jobStatus.jobId);
         }
 
         void DoBuildAndUpload()
         {
             CloudTools.UploadAllRecordings(RecordingUploadWindow.SetAllTestsAndRecordings());
             Debug.Log("Uploaded all recordings.");
-            CloudTestBuilder.CreateLocalBuild();
-            CloudTestPipeline.testBuildFinished += OnBuildFinish;
+            originalBuildTarget = EditorUserBuildSettings.activeBuildTarget;
+            if (buildTarget != EditorUserBuildSettings.activeBuildTarget)
+            {
+                Debug.Log("switching build target");
+                EditorUserBuildSettings.SwitchActiveBuildTarget(BuildPipeline.GetBuildTargetGroup(buildTarget), buildTarget);
+            }
+            createBuild = true;
         }
 
         private void RunOnDeviceFarm(string buildId)
@@ -164,7 +199,7 @@ namespace Unity.RecordedTesting.Editor
             // TODO use allCloudTests
             var runTests = new List<string>(new string[] { "DummyUTFTest" });
 
-            jobStatus = CloudTestPipeline.RunCloudTests(buildId, runTests);
+            jobStatus = Client.RunCloudTests(buildId, runTests);
         }
 
         private void OnBuildFinish()
@@ -174,8 +209,14 @@ namespace Unity.RecordedTesting.Editor
 #endif
             CloudTestPipeline.testBuildFinished -= OnBuildFinish;
 
-            uploadInfo = CloudTestPipeline.GetUploadURL();
-            CloudTestPipeline.UploadBuildToUrl(uploadInfo.upload_uri, _bundleUpload.buildPath);
+            Debug.Log($"Build successfully saved at - {_bundleUpload.buildPath}");
+            if (originalBuildTarget != EditorUserBuildSettings.activeBuildTarget)
+            {
+                EditorUserBuildSettings.SwitchActiveBuildTarget(BuildPipeline.GetBuildTargetGroup(originalBuildTarget), originalBuildTarget);
+            }
+
+            uploadInfo = Client.GetUploadURL();
+            Client.UploadBuildToUrl(uploadInfo.upload_uri, _bundleUpload.buildPath);
 
             // TODO Query upload status
             EditorUtility.DisplayProgressBar("Wait for upload status", "Wait for upload status", 0);
@@ -185,7 +226,7 @@ namespace Unity.RecordedTesting.Editor
         //[MenuItem("Automated QA/Dev/Run Debug Cloud Test")]
         static void RunDebugCloudTest()
         {
-            CloudTestPipeline.RunCloudTests("f3678dc4-2218-4320-a4c8-41ff5cdd7b22", new List<string>(new string[] { "DummyUTFTest" }));
+            Client.RunCloudTests("f3678dc4-2218-4320-a4c8-41ff5cdd7b22", new List<string>(new string[] { "DummyUTFTest" }));
         }
 
         //   [MenuItem("Automated QA/Dev/Log Project ID")]

@@ -1,3 +1,4 @@
+﻿using System;
 using System.IO;
 using UnityEngine;
 using System.Collections.Generic;
@@ -6,6 +7,42 @@ namespace Unity.AutomatedQA
 {
     public static class AutomatedQARuntimeSettings
     {
+        internal static class Keys
+        {
+            public static readonly string LogLevel = "LogLevel";
+            public static readonly string EnableScreenshots = "EnableScreenshots";
+            public static readonly string PostActionScreenshotDelay = "PostActionScreenshotDelay";
+            public static readonly string RecordingFolderName = "RecordingFolderName";
+            public static readonly string ActivatePlaybackVisualFx = "ActivatePlaybackVisualFx";
+            public static readonly string ActivateClickFeedbackFx = "ActivateClickFeedbackFx";
+            public static readonly string ActivateDragFeedbackFx = "ActivateDragFeedbackFx";
+            public static readonly string ActivateHighlightFeedbackFx = "ActivateHighlightFeedbackFx";
+            public static readonly string UseDynamicWaits = "UseDynamicWaits";
+            public static readonly string DynamicWaitTimeout = "DynamicWaitTimeout";
+            public static readonly string DynamicLoadSceneTimeout = "DynamicLoadSceneTimeout";
+        }
+
+        public static readonly Dictionary<string, string> Tooltips = new Dictionary<string, string>()
+        {
+            { Keys.LogLevel,  
+@"Set the maximum level of log messages
+0 = Logging disabled.
+1 = Errors only.
+2 = Errors and Warnings.
+3 = Errors, Warnings, Info.
+4 = Errors, Warnings, Info, Debug."},
+            { Keys.EnableScreenshots, "Allows screenshots to be recorded during test run. These are used to show screenshots in reports."},
+            { Keys.PostActionScreenshotDelay, "delay in seconds after an action to take a screenshot"},
+            { Keys.RecordingFolderName, "Name of folder under Assets where we store recording files."},
+            { Keys.ActivatePlaybackVisualFx, "Enable or disable visual Fx feedback for actions taken during playback of recordings. If true, check individual feedback booleans to see if a subset will be activated. "},
+            { Keys.ActivateClickFeedbackFx,"Activates ripple effect on point of click during playback of recordings."},
+            { Keys.ActivateDragFeedbackFx, "Activates drag effect between drag start and drag release during playback of recordings."},
+            { Keys.ActivateHighlightFeedbackFx, "Activates highlight effect on point of click during playback of recordings."},
+            { Keys.UseDynamicWaits, "Wait for elements to become interactable before trying to interact with them (as opposed to waiting for the original recorded timeDelta period before executing an action)."},
+            { Keys.DynamicWaitTimeout, "Period of time in seconds to wait for a target GameObject to be ready while waiting to perform the next action in test playback."},
+            { Keys.DynamicLoadSceneTimeout, "Period of time in seconds to wait for scene load while waiting to perform the next action in test playback."},
+        };
+        
         public static readonly string GAMESIM_API_ENDPOINT = "https://api.prd.gamesimulation.unity3d.com";
         public static readonly string DEVICE_TESTING_API_ENDPOINT = "https://device-testing.prd.gamesimulation.unity3d.com";
         private static AutomatedQASettingsData settings
@@ -32,7 +69,7 @@ namespace Unity.AutomatedQA
             // Handle required configs. Re-add them if deleted from config settings file.
             List<AutomationSet> setsToReAddToConfigSettingsFile = new List<AutomationSet>();
 
-            string settingKey = "RecordingFolderName";
+            string settingKey = Keys.RecordingFolderName;
             AutomationSet set = settings.Configs.Find(c => c.Key == settingKey);
             if (set == null || set == default(AutomationSet))
             {
@@ -41,7 +78,7 @@ namespace Unity.AutomatedQA
             }
             RecordingFolderName = set.Value.ToString();
 
-            settingKey = "ActivatePlaybackVisualFx";
+            settingKey = Keys.ActivatePlaybackVisualFx;
             set = settings.Configs.Find(c => c.Key == settingKey);
             if (set == null || set == default(AutomationSet))
             {
@@ -50,7 +87,7 @@ namespace Unity.AutomatedQA
             }
             ActivatePlaybackVisualFx = bool.Parse(set.Value.ToString());
 
-            settingKey = "ActivateClickFeedbackFx";
+            settingKey = Keys.ActivateClickFeedbackFx;
             set = settings.Configs.Find(c => c.Key == settingKey);
             if (set == null || set == default(AutomationSet))
             {
@@ -59,7 +96,7 @@ namespace Unity.AutomatedQA
             }
             ActivateClickFeedbackFx = bool.Parse(set.Value.ToString());
 
-            settingKey = "ActivateDragFeedbackFx";
+            settingKey = Keys.ActivateDragFeedbackFx;
             set = settings.Configs.Find(c => c.Key == settingKey);
             if (set == null || set == default(AutomationSet))
             {
@@ -68,7 +105,7 @@ namespace Unity.AutomatedQA
             }
             ActivateDragFeedbackFx = bool.Parse(set.Value.ToString());
 
-            settingKey = "ActivateHighlightFeedbackFx";
+            settingKey = Keys.ActivateHighlightFeedbackFx;
             set = settings.Configs.Find(c => c.Key == settingKey);
             if (set == null || set == default(AutomationSet))
             {
@@ -77,7 +114,7 @@ namespace Unity.AutomatedQA
             }
             ActivateHighlightFeedbackFx = bool.Parse(set.Value.ToString());
 
-            settingKey = "EnableScreenshots";
+            settingKey = Keys.EnableScreenshots;
             set = settings.Configs.Find(c => c.Key == settingKey);
             if (set == null || set == default(AutomationSet))
             {
@@ -86,7 +123,16 @@ namespace Unity.AutomatedQA
             }
             EnableScreenshots = bool.Parse(set.Value.ToString());
 
-            settingKey = "UseDynamicWaits";
+            settingKey = Keys.PostActionScreenshotDelay;
+            set = settings.Configs.Find(c => c.Key == settingKey);
+            if (set == null || set == default(AutomationSet))
+            {
+                set = new AutomationSet(settingKey, PostActionScreenshotDelay.ToString());
+                setsToReAddToConfigSettingsFile.Add(set);
+            }
+            PostActionScreenshotDelay = float.Parse(set.Value.ToString());
+
+            settingKey = Keys.UseDynamicWaits;
             set = settings.Configs.Find(c => c.Key == settingKey);
             if (set == null || set == default(AutomationSet))
             {
@@ -95,7 +141,7 @@ namespace Unity.AutomatedQA
             }
             UseDynamicWaits = bool.Parse(set.Value.ToString());
 
-            settingKey = "DynamicWaitTimeout";
+            settingKey = Keys.DynamicWaitTimeout;
             set = settings.Configs.Find(c => c.Key == settingKey);
             if (set == null || set == default(AutomationSet))
             {
@@ -104,7 +150,7 @@ namespace Unity.AutomatedQA
             }
             DynamicWaitTimeout = float.Parse(set.Value.ToString());
 
-            settingKey = "DynamicLoadSceneTimeout";
+            settingKey = Keys.DynamicLoadSceneTimeout;
             set = settings.Configs.Find(c => c.Key == settingKey);
             if (set == null || set == default(AutomationSet))
             {
@@ -113,14 +159,14 @@ namespace Unity.AutomatedQA
             }
             DynamicLoadSceneTimeout = float.Parse(set.Value.ToString());
 
-            settingKey = "EnableDebugLogging";
+            settingKey = Keys.LogLevel;
             set = settings.Configs.Find(c => c.Key == settingKey);
             if (set == null || set == default(AutomationSet))
             {
-                set = new AutomationSet(settingKey, EnableDebugLogging.ToString());
+                set = new AutomationSet(settingKey, ((int) LogLevel).ToString());
                 setsToReAddToConfigSettingsFile.Add(set);
             }
-            EnableDebugLogging = bool.Parse(set.Value.ToString());
+            LogLevel = Enum.TryParse<AQALogger.LogLevel>(set.Value.ToString(), out AQALogger.LogLevel i) ? i : AQALogger.LogLevel.Info;
 
 #if UNITY_EDITOR
             // Add back any required configs that were deleted by the user.
@@ -346,21 +392,43 @@ namespace Unity.AutomatedQA
         }
         private static bool _enableScreenshots = true;
 
-        /// <summary>
-        /// Adds extra debug messages during recording creation and playback.
-        /// </summary>
-        public static bool EnableDebugLogging
+        public static float PostActionScreenshotDelay
         {
             get
             {
-                return _enableDebugLogging;
+                if (_postActionScreenshotDelay < 0f)
+                {
+                    _postActionScreenshotDelay = 0f;
+                }
+                return _postActionScreenshotDelay;
             }
             set
             {
-                _enableDebugLogging = value;
+                _postActionScreenshotDelay = value;
             }
         }
-        private static bool _enableDebugLogging = true;
+        private static float _postActionScreenshotDelay = 0.25f;
+        
+        /// <summary>
+        /// Set the maximum level of log messages
+        /// 0 = Logging disabled.
+        /// 1 = Errors only.
+        /// 2 = Errors and Warnings.
+        /// 3 = Errors, Warnings, Info.
+        /// 4 = Errors, Warnings, Info, Debug.
+        /// </summary>
+        public static AQALogger.LogLevel LogLevel
+        {
+            get
+            {
+                return _logLevel;
+            }
+            set
+            {
+                _logLevel = value;
+            }
+        }
+        private static AQALogger.LogLevel _logLevel = AQALogger.LogLevel.Info;
 
         public static BuildType buildType
         {
@@ -486,17 +554,17 @@ namespace Unity.AutomatedQA
             if (configTextAsset == null)
             {
                 AutomatedQASettingsData configCategories = new AutomatedQASettingsData();
-                configCategories.Configs.Add(new AutomationSet("EnableDebugLogging", EnableDebugLogging.ToString()));
-                configCategories.Configs.Add(new AutomationSet("EnableScreenshots", EnableScreenshots.ToString()));
-                configCategories.Configs.Add(new AutomationSet("RecordingFolderName", RecordingFolderName));
-                configCategories.Configs.Add(new AutomationSet("ActivatePlaybackVisualFx", ActivatePlaybackVisualFx.ToString()));
-                configCategories.Configs.Add(new AutomationSet("ActivateClickFeedbackFx", ActivateClickFeedbackFx.ToString()));
-                configCategories.Configs.Add(new AutomationSet("ActivateDragFeedbackFx", ActivateDragFeedbackFx.ToString()));
-                configCategories.Configs.Add(new AutomationSet("ActivateHighlightFeedbackFx", ActivateHighlightFeedbackFx.ToString()));
-                configCategories.Configs.Add(new AutomationSet("UseDynamicWaits", UseDynamicWaits.ToString()));
-                configCategories.Configs.Add(new AutomationSet("DynamicWaitTimeout", DynamicWaitTimeout.ToString()));
-                configCategories.Configs.Add(new AutomationSet("DynamicLoadSceneTimeout", DynamicLoadSceneTimeout.ToString()));
-
+                configCategories.Configs.Add(new AutomationSet(Keys.LogLevel, LogLevel.ToString()));
+                configCategories.Configs.Add(new AutomationSet(Keys.EnableScreenshots, EnableScreenshots.ToString()));
+                configCategories.Configs.Add(new AutomationSet(Keys.PostActionScreenshotDelay, PostActionScreenshotDelay.ToString()));
+                configCategories.Configs.Add(new AutomationSet(Keys.RecordingFolderName, RecordingFolderName));
+                configCategories.Configs.Add(new AutomationSet(Keys.ActivatePlaybackVisualFx, ActivatePlaybackVisualFx.ToString()));
+                configCategories.Configs.Add(new AutomationSet(Keys.ActivateClickFeedbackFx, ActivateClickFeedbackFx.ToString()));
+                configCategories.Configs.Add(new AutomationSet(Keys.ActivateDragFeedbackFx, ActivateDragFeedbackFx.ToString()));
+                configCategories.Configs.Add(new AutomationSet(Keys.ActivateHighlightFeedbackFx, ActivateHighlightFeedbackFx.ToString()));
+                configCategories.Configs.Add(new AutomationSet(Keys.UseDynamicWaits, UseDynamicWaits.ToString()));
+                configCategories.Configs.Add(new AutomationSet(Keys.DynamicWaitTimeout, DynamicWaitTimeout.ToString()));
+                configCategories.Configs.Add(new AutomationSet(Keys.DynamicLoadSceneTimeout, DynamicLoadSceneTimeout.ToString()));
 #if UNITY_EDITOR
                 File.WriteAllText(Path.Combine(Application.dataPath, AutomatedQASettingsResourcesPath, AutomatedQaSettingsFileName), JsonUtility.ToJson(configCategories));
 #endif
@@ -507,45 +575,53 @@ namespace Unity.AutomatedQA
 
         public static string GetStringFromCustomSettings(string key)
         {
+            AQALogger logger = new AQALogger();
+
             AutomationSet keyVal = settings.Configs.Find(x => x.Key == key);
             if (keyVal == default(AutomationSet) || string.IsNullOrEmpty(keyVal.Key))
             {
-                Debug.LogError($"Key requested ({key}) which is not defined in the settings file or is invalid.{(hostPlatform == HostPlatform.Cloud ? " Make sure you are supplying the expected settings config file name to DeviceFarmConfig." : string.Empty)}");
+                logger.LogError($"Key requested ({key}) which is not defined in the settings file or is invalid.{(hostPlatform == HostPlatform.Cloud ? " Make sure you are supplying the expected settings config file name to DeviceFarmConfig." : string.Empty)}");
             }
             return keyVal.Value;
         }
 
         public static int GetIntFromCustomSettings(string key)
         {
+            AQALogger logger = new AQALogger();
+
             AutomationSet keyVal = settings.Configs.Find(x => x.Key == key);
             int val = 0;
             bool isInt = keyVal == default(AutomationSet) ? false : int.TryParse(keyVal.Value, out val);
             if (!isInt)
             {
-                Debug.LogError($"Key requested ({key}) which is not defined in the settings file or is invalid.{(hostPlatform == HostPlatform.Cloud ? " Make sure you are supplying the expected settings config file name to DeviceFarmConfig." : string.Empty)}");
+                logger.LogError($"Key requested ({key}) which is not defined in the settings file or is invalid.{(hostPlatform == HostPlatform.Cloud ? " Make sure you are supplying the expected settings config file name to DeviceFarmConfig." : string.Empty)}");
             }
             return val;
         }
 
         public static float GetFloatFromCustomSettings(string key)
         {
+            AQALogger logger = new AQALogger();
+
             AutomationSet keyVal = settings.Configs.Find(x => x.Key == key);
             float val = 0;
             bool isFloat = keyVal == default(AutomationSet) ? false : float.TryParse(keyVal.Value, out val);
             if (!isFloat)
             {
-                Debug.LogError($"Key requested ({key}) which is not defined in the settings file or is invalid.{(hostPlatform == HostPlatform.Cloud ? " Make sure you are supplying the expected settings config file name to DeviceFarmConfig." : string.Empty)}");
+                logger.LogError($"Key requested ({key}) which is not defined in the settings file or is invalid.{(hostPlatform == HostPlatform.Cloud ? " Make sure you are supplying the expected settings config file name to DeviceFarmConfig." : string.Empty)}");
             }
             return val;
         }
 
         public static bool GetBooleanFromCustomSettings(string key)
         {
+            AQALogger logger = new AQALogger();
+
             AutomationSet keyVal = settings.Configs.Find(x => x.Key == key);
             bool returnVal = false;
             if (keyVal == default(AutomationSet) || !bool.TryParse(keyVal.Value, out returnVal))
             {
-                Debug.LogError($"Key requested ({key}) which is not defined in the settings file or is invalid.{(hostPlatform == HostPlatform.Cloud ? " Make sure you are supplying the expected settings config file name to DeviceFarmConfig." : string.Empty)}");
+                logger.LogError($"Key requested ({key}) which is not defined in the settings file or is invalid.{(hostPlatform == HostPlatform.Cloud ? " Make sure you are supplying the expected settings config file name to DeviceFarmConfig." : string.Empty)}");
             }
             return returnVal;
         }

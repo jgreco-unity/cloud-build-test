@@ -1,14 +1,13 @@
 ﻿using System.Collections.Generic;
 using System.IO;
 using System.Threading.Tasks;
-using Unity.AutomatedQA;
-using Unity.AutomatedQA.Editor;
+using Unity.RecordedPlayback;
 using UnityEditor;
 using UnityEngine;
 using UnityEngine.UIElements;
 using static UnityEngine.EventSystems.RecordingInputModule;
 
-namespace Unity.RecordedPlayback.Editor
+namespace Unity.AutomatedQA.Editor
 {
 	public class CodeGenerationWindow : EditorWindow
 	{
@@ -17,7 +16,8 @@ namespace Unity.RecordedPlayback.Editor
 		private static string resourcePath = "Packages/com.unity.automated-testing/Editor/CodeGeneration/";
 		private static CodeGenerationWindow wnd;
 		private static List<string> allRecordingFiles;
-		private static List<(string recording, Toggle toggle)> toggles;
+		private static List<(string recording, Toggle toggle)> recordingToggles;
+		private static List<(string recording, Toggle toggle)> automatedRunToggles;
 		private static List<(string recording, Toggle toggle)> overrideToggles;
 		private static List<(string recordingFileName, string cSharpScriptFileName, bool isStepFile)> filesWithEdits;
 		private static readonly string TOGGLE_ON_CHAR = "✓";
@@ -62,7 +62,8 @@ namespace Unity.RecordedPlayback.Editor
 		void SetUpView(bool isSave = false, bool isError = false)
 		{
 			overrideToggles = new List<(string recording, Toggle toggle)>();
-			toggles = new List<(string recording, Toggle toggle)>();
+			recordingToggles = new List<(string recording, Toggle toggle)>();
+			automatedRunToggles = new List<(string recording, Toggle toggle)>();
 			classBasedOnCurrentEditorColorTheme = EditorGUIUtility.isProSkin ? "editor-is-dark-theme" : "editor-is-light-theme";
 
 			root = rootVisualElement;
@@ -148,7 +149,11 @@ namespace Unity.RecordedPlayback.Editor
 				{
 					toggleAll.text = TOGGLE_ON_CHAR;
 				}
-				foreach ((string recording, Toggle toggle) toggle in toggles)
+				foreach ((string recording, Toggle toggle) toggle in recordingToggles)
+				{
+					toggle.toggle.value = isToggleOn;
+				}
+				foreach ((string recording, Toggle toggle) toggle in automatedRunToggles)
 				{
 					toggle.toggle.value = isToggleOn;
 				}
@@ -240,6 +245,12 @@ namespace Unity.RecordedPlayback.Editor
 						finalRecordings.Add(allRecordings[x].fileName, 0);
 					}
 				}
+
+				Label recordingsHeader = new Label();
+				recordingsHeader.text = "Recordings";
+				recordingsHeader.AddToClassList("recording-list-header");
+				root.Add(recordingsHeader);
+
 				foreach (KeyValuePair<string, int> recording in finalRecordings)
 				{
 					VisualElement recordingRow = new VisualElement()
@@ -254,7 +265,7 @@ namespace Unity.RecordedPlayback.Editor
 					string recordingNameWithoutFileType = recording.Key.Replace(".json", string.Empty);
 					Toggle toggle = new Toggle();
 					toggle.AddToClassList("recording");
-					toggles.Add((recordingNameWithoutFileType, toggle));
+					recordingToggles.Add((recordingNameWithoutFileType, toggle));
 					recordingRow.Add(toggle);
 					Label toggleLabel = new Label();
 					toggleLabel.AddToClassList("recording");
@@ -270,7 +281,45 @@ namespace Unity.RecordedPlayback.Editor
 					}
 					root.Add(recordingRow);
 				}
-			}
+
+				Label automatorsHeader = new Label();
+				automatorsHeader.text = "Automated Runs";
+				automatorsHeader.AddToClassList("recording-list-header");
+				root.Add(automatorsHeader);
+
+                List<(string path, AutomatedRun automatedRun)> automatedRuns = GetAutomatedRuns();
+                foreach ((string path, AutomatedRun automatedRun) ar in automatedRuns)
+                {
+                    VisualElement recordingRow = new VisualElement()
+                    {
+                        style =
+                    {
+                        flexDirection = FlexDirection.Row,
+                        flexShrink = 0f,
+                    }
+                    };
+                    recordingRow.AddToClassList("toggle-row-main");
+                    string recordingNameWithoutFileType = ar.automatedRun.name;
+                    Toggle toggle = new Toggle();
+                    toggle.AddToClassList("recording");
+                    automatedRunToggles.Add((ar.path, toggle));
+                    recordingRow.Add(toggle);
+                    Label toggleLabel = new Label();
+                    toggleLabel.AddToClassList("recording");
+                    toggleLabel.text = recordingNameWithoutFileType;
+                    recordingRow.Add(toggleLabel);
+                    List<AutomatorConfig> recordedPlaybackAutomators = ar.automatedRun.config.automators.FindAll(x => x != null && x.GetType() == typeof(RecordedPlaybackAutomator)).ToList();
+                    if (recordedPlaybackAutomators.Any())
+                    {
+                        Label childCountLabel = new Label();
+                        childCountLabel.AddToClassList("recording-segments-found");
+                        childCountLabel.text = $"({recordedPlaybackAutomators.Count})";
+                        childCountLabel.tooltip = "The number of recordings included in this automated run.";
+                        recordingRow.Add(childCountLabel);
+                    }
+                    root.Add(recordingRow);
+                }
+            }
 		}
 
 		public void GenerateTests(bool replaceWithSimpleTests)
@@ -290,7 +339,7 @@ namespace Unity.RecordedPlayback.Editor
 					stepFilesToOverwrite.Add(file.recordingFileName);
 					if (!replaceWithSimpleTests)
 					{
-						CodeGenerator.GenerateTest(string.Empty, true, false, file.recordingFileName); // Handle step files.
+						CodeGenerator.GenerateTestFromRecording(string.Empty, true, false, file.recordingFileName); // Handle step files.
 					}
 				}
 
@@ -313,7 +362,11 @@ namespace Unity.RecordedPlayback.Editor
 					// If the associated overwrite toggle was checked, overwrite the edited file.
 					if (file.toggle.value)
 					{
-						CodeGenerator.GenerateTest(originalRecordingFileName, true, replaceWithSimpleTests);
+						file.toggle.value = false;
+						if (IsAutomatedRun(file.recording))
+							CodeGenerator.GenerateTestFromAutomatedRun(file.recording, true, replaceWithSimpleTests);
+						else
+							CodeGenerator.GenerateTestFromRecording(originalRecordingFileName, true, replaceWithSimpleTests);
 					}
 				}
 			}
@@ -323,15 +376,24 @@ namespace Unity.RecordedPlayback.Editor
 			overrideToggles = new List<(string recording, Toggle toggle)>();
 
 			// Test that the old file content is not identical to the newly-generated content, which indicates that a user edited the file directly, or edited the recording.
-			foreach ((string recording, Toggle toggle) file in toggles)
+			foreach ((string recording, Toggle toggle) file in recordingToggles)
 			{
 				if (!file.toggle.value)
 					continue;
 
 				// Test that the old file content is different from a freshly-generated test.
-				filesWithEdits.AddRange(CodeGenerator.GenerateTest(file.recording, false, replaceWithSimpleTests));
+				filesWithEdits.AddRange(CodeGenerator.GenerateTestFromRecording(file.recording, false, replaceWithSimpleTests));
 			}
-			bool isSuccess = false;
+            foreach ((string recording, Toggle toggle) file in automatedRunToggles)
+            {
+                if (!file.toggle.value)
+                    continue;
+
+                // Test that the old file content is different from a freshly-generated test.
+                filesWithEdits.AddRange(CodeGenerator.GenerateTestFromAutomatedRun(file.recording, false, replaceWithSimpleTests));
+            }
+
+            bool isSuccess = false;
 			// Do not recompile if we have any edited files needing confirmation. If we do, the editor window will refresh and displayed tests will be removed.
 			if (!filesWithEdits.Any())
 			{
@@ -368,7 +430,34 @@ namespace Unity.RecordedPlayback.Editor
 		/// <returns></returns>
 		private bool AreNoRecordingCheckboxesSelected()
 		{
-			return !overrideToggles.Any() && !toggles.FindAll(x => x.toggle.value).Any() || !toggles.Any() && !overrideToggles.FindAll(x => x.toggle.value).Any();
+			return !overrideToggles.Any() && !recordingToggles.FindAll(x => x.toggle.value).Any() && !automatedRunToggles.FindAll(x => x.toggle.value).Any() ||
+				!recordingToggles.Any() && !automatedRunToggles.Any() && !overrideToggles.FindAll(x => x.toggle.value).Any();
+		}
+
+		/// <summary>
+		/// Find all assets and filter out Automated Runs.
+		/// </summary>
+		/// <typeparam name="T"></typeparam>
+		/// <returns></returns>
+		public static List<(string path, AutomatedRun automatedRun)> GetAutomatedRuns()
+		{
+			List<(string path, AutomatedRun automatedRun)> allAutomators = new List<(string path, AutomatedRun automatedRun)>();
+			var guids = AssetDatabase.FindAssets($"t:{typeof(AutomatedRun)}");
+			foreach (var t in guids)
+			{
+				var assetPath = AssetDatabase.GUIDToAssetPath(t);
+				var asset = AssetDatabase.LoadAssetAtPath<AutomatedRun>(assetPath);
+				if (asset != null && !asset.config.automators.FindAll(x => x == null).Any())
+				{
+					allAutomators.Add((assetPath, asset));
+				}
+			}
+			return allAutomators;
+		}
+
+		private static bool IsAutomatedRun(string filename)
+		{
+			return filename.ToLower().EndsWith(".asset");
 		}
 	}
 }

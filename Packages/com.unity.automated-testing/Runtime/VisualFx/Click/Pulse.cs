@@ -117,7 +117,7 @@ namespace Unity.AutomatedQA
                 if(!IsMouseDown)
                     widthAndHeight += Time.deltaTime / lifetime * finalWidthAndHeight;
                 currentLifetime -= Time.deltaTime;
-                yield return new WaitForEndOfFrame();
+                yield return null;
             }
 
             WasMouseDown = false;

@@ -13,12 +13,15 @@ namespace Unity.RecordedTesting.Runtime
         
         public static void LogTestCompletion(string testName)
         {
-            Debug.Log("Unity Test Completed: " + testName);
+            var logger = new AQALogger();
+            logger.Log("Unity Test Completed: " + testName);
         }
 
 
         public static void DownloadRecording(string recordingFileName, string resultFileOutputPath)
         {
+            var logger = new AQALogger();
+
             var projectId = Application.cloudProjectId;
             var downloadUri =
                 $"{AutomatedQARuntimeSettings.GAMESIM_API_ENDPOINT}/v1/recordings/{recordingFileName}/download?projectId={projectId}";
@@ -26,7 +29,7 @@ namespace Unity.RecordedTesting.Runtime
             var dh = new DownloadHandlerFile(resultFileOutputPath);
 
             dh.removeFileOnAbort = true;
-            Debug.Log("Starting download" + downloadUri);
+            logger.Log("Starting download" + downloadUri);
             using (var webrx = UnityWebRequest.Get(downloadUri))
             {
 
@@ -39,11 +42,11 @@ namespace Unity.RecordedTesting.Runtime
 
                 if (webrx.IsError())
                 {
-                    Debug.LogError($"Couldn't download file. Error - {webrx.error}");
+                    logger.LogError($"Couldn't download file. Error - {webrx.error}");
                 }
                 else
                 {
-                    Debug.Log($"Downloaded file saved to {resultFileOutputPath}.");
+                    logger.Log($"Downloaded file saved to {resultFileOutputPath}.");
                 }
 
             }

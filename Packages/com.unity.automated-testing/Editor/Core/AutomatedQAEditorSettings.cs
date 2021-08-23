@@ -19,8 +19,9 @@ namespace Unity.AutomatedQA.Editor
             
             public const int CreateAutomatedRun = 200;
             public const int CompositeRecordings = 201;
+            public const int RunGameCrawler = 202;
         }
-        
+
         [Serializable]
         internal class SettingsData
         {
@@ -141,10 +142,8 @@ namespace Unity.AutomatedQA.Editor
             {
                 allDefined.Remove(f);
             }
-           
-            PlayerSettings.SetScriptingDefineSymbolsForGroup (
-                EditorUserBuildSettings.selectedBuildTargetGroup,
-                string.Join (";", allDefined.ToArray()));
+
+            PlayerSettings.SetScriptingDefineSymbolsForGroup(targetGroup, string.Join (";", allDefined.ToArray()));
         }
 
         public static void ApplyBuildFlags(BuildTargetGroup targetGroup)
@@ -158,9 +157,7 @@ namespace Unity.AutomatedQA.Editor
             allDefines.Add(hostPlatform.GetBuildFlag());
             allDefines.Add(recordingFileStorage.GetBuildFlag());
 
-            PlayerSettings.SetScriptingDefineSymbolsForGroup (
-                EditorUserBuildSettings.selectedBuildTargetGroup,
-                string.Join (";", allDefines.ToArray()));
+            PlayerSettings.SetScriptingDefineSymbolsForGroup(targetGroup, string.Join (";", allDefines.ToArray()));
         }
     }
 }

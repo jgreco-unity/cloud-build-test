@@ -11,13 +11,21 @@ namespace Unity.RecordedPlayback.Editor
         private static HashSet<string> createdFiles = new HashSet<string>();
         private static HashSet<string> createdDirs = new HashSet<string>();
 
-        public static void SaveCurrentRecordingDataAsProjectAsset()
+        public static string SaveCurrentRecordingDataAsProjectAsset()
         {
+
+            if (RecordedPlaybackPersistentData.GetRecordingMode() != RecordingMode.Record &&
+                ReportingManager.IsCrawler)
+                return string.Empty;
+
             // TODO use project setting to determine output path
             string recordingIdentifier = DateTime.Now.ToString("yyyy-MM-dd-THH-mm-ss");
-            var outputPath = Path.Combine(AutomatedQARuntimeSettings.RecordingDataPath,
-                $"recording-{recordingIdentifier}.json");
+            string recordingName = Path.Combine($"recording-{recordingIdentifier}.json");
+            var outputPath = Path.Combine(AutomatedQARuntimeSettings.RecordingDataPath, recordingName);
             var mainFile = RecordedPlaybackPersistentData.GetRecordingDataFilePath();
+
+            if (!File.Exists(mainFile))
+                return string.Empty;
 
             Directory.CreateDirectory(Path.GetDirectoryName(outputPath));
             File.Copy(mainFile, outputPath, false);
@@ -30,8 +38,9 @@ namespace Unity.RecordedPlayback.Editor
                 File.Copy(segmentPath, destPath, true);
             }
             AssetDatabase.Refresh();
-
+            RecordedPlaybackPersistentData.CleanRecordingData();
             RecordedPlaybackAnalytics.SendRecordingCreation(outputPath, new System.IO.FileInfo(outputPath).Length, -1);
+            return recordingName;
         }
 
         public static void CreateDirectoryIfNotExists(string path)

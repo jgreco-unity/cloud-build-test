@@ -2,12 +2,15 @@
 using System.Collections;
 using UnityEditor;
 using UnityEngine;
+using UnityEngine.EventSystems;
 
 namespace Unity.AutomatedQA.Editor
 {
     [ExecuteInEditMode]
     public class StartAutomatedQAFromEditor : MonoBehaviour
     {
+        private AQALogger logger;
+
         [SerializeField]
         [HideInInspector]
         private AutomatedRun.RunConfig runConfig;
@@ -16,6 +19,9 @@ namespace Unity.AutomatedQA.Editor
         [HideInInspector]
         private string AutomatorName;
 
+        // Supports running multiple automators without changing playmode.
+        public static bool runWhileEditorIsAlreadyStarted { get; set; }
+
         public static void StartAutomatedRun(AutomatedRun run)
         {
             var go = new GameObject("StartAutomatedQAFromEditor");
@@ -23,10 +29,12 @@ namespace Unity.AutomatedQA.Editor
             init.runConfig = run.config;
             init.AutomatorName = run.ToString().Replace("(Unity.AutomatedQA.AutomatedRun)", string.Empty).Trim();
             EditorApplication.isPlaying = true;
+            RecordingInputModule.isWorkInProgress = true;
         }
 
         private IEnumerator Start()
         {
+            logger = new AQALogger();
             // Wait for 1 frame to avoid initializing too early
             yield return null;
 
@@ -34,23 +42,19 @@ namespace Unity.AutomatedQA.Editor
             {
                 if (runConfig == null)
                 {
-                    Debug.LogError($"runConfig is null");
+                    logger.LogError($"runConfig is null");
                 }
 
-                ReportingManager.IsAutomatorTest = true;
                 ReportingManager.CurrentTestName = AutomatorName;
-                CentralAutomationController.Instance.quitOnFinish = true;
                 CentralAutomationController.Instance.Run(runConfig);
             }
             
-            if (EditorApplication.isPlaying || !EditorApplication.isPlayingOrWillChangePlaymode)
+            if (!runWhileEditorIsAlreadyStarted && !EditorApplication.isPlayingOrWillChangePlaymode)
             {
                 // Destroys the StartRecordedPlaybackFromEditor unless it is currently transitioning to playmode
                 DestroyImmediate(this.gameObject);
             }
         }
-
-
     }
 }
 #endif

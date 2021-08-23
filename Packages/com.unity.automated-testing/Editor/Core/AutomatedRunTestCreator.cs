@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Text.RegularExpressions;
@@ -13,14 +13,14 @@ namespace Unity.AutomatedQA.Editor
         private static string TestType = "AutomatedRunTests";
         private static string GeneratedTestScriptTemplatePath =>
             $"{TestCreatorUtils.ScriptTemplatePath}C# Script-GeneratedAutomatedRunTests.cs.txt";
-        
+
         public static void GenerateAutomatedRunTest(string runPath)
         {
             TestCreatorUtils.CreateTestAssemblyFolder();
             TestCreatorUtils.CreateTestAssembly();
             TestCreatorUtils.CreateTestScriptFolder(TestType);
             CreateTestScripts(runPath);
-            
+
             AssetDatabase.SaveAssets();
             AssetDatabase.Refresh();
 
@@ -29,13 +29,12 @@ namespace Unity.AutomatedQA.Editor
 
         private static void CreateTestScripts(string runPath)
         {
-            string runName = Path.GetFileNameWithoutExtension(runPath);
             string templateContent = File.ReadAllText(GeneratedTestScriptTemplatePath);
-            var runFilePath = runPath;
+            string runName = Path.GetFileNameWithoutExtension(runPath);
             var testClassName = "AutomatedRunTest_" + runName;
             string content = templateContent
                 .Replace("#CLASS_NAME#", testClassName)
-                .Replace("#RUN_FILEPATH#", runFilePath)
+                .Replace("#RUN_FILEPATH#", runPath)
                 .Replace("#RUN_NAME#", runName);
 
             var writePath = Path.Combine(Application.dataPath,

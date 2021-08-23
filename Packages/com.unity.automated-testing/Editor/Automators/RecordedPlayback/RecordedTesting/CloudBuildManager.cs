@@ -1,5 +1,6 @@
 using System;
 using System.IO;
+using TestPlatforms.Cloud;
 using Unity.CloudTesting.Editor;
 using UnityEditor;
 using UnityEngine;
@@ -11,16 +12,19 @@ namespace Unity.RecordedTesting.Editor
         public static void PostExport(string exportPath)
         {
             var authToken = Environment.GetEnvironmentVariable("AUTH_TOKEN");
+            var projectId = Environment.GetEnvironmentVariable("PROJECT_ID");
             Debug.Log("CloudBuildPostExport: Build started");
             try
             {
-                CloudTestPipeline.AccessToken = authToken;
-                CloudTestBuilder.TargetPlatform = BuildTarget.Android;
-                CloudTestBuilder.BuildAndRunTests();
+                if (string.IsNullOrEmpty(projectId))
+                {
+                    projectId = Application.cloudProjectId;
+                }
+                CloudTestBuilder.BuildAndRunTests(BuildTarget.Android, authToken, projectId);
             }
             finally
             {
-                Debug.Log($"CloudBuildPostExport: Build completed - {CloudTestPipeline.BuildPath} {File.Exists(CloudTestPipeline.BuildPath)}");
+                Debug.Log($"CloudBuildPostExport: Build completed - {CloudTestConfig.BuildPath} {File.Exists(CloudTestConfig.BuildPath)}");
             }
         }
     }

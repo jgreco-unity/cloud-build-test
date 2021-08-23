@@ -17,10 +17,12 @@ namespace Unity.RecordedTesting
     
     public class CloudTesting : MonoBehaviour
     {
-
+        private AQALogger logger;
         
         public class TestName
         {
+            private AQALogger logger;
+
             public string fullName { get; private set; }
             public string funcName { get; private set; }
             public string typeName { get; private set; }
@@ -28,6 +30,7 @@ namespace Unity.RecordedTesting
 
             public TestName(string testName)
             {
+                logger = new AQALogger();
                 this.fullName = testName;
 
                 var matches = Regex.Matches(testName, @"[^.][a-zA-Z0-9-_]+");
@@ -39,7 +42,7 @@ namespace Unity.RecordedTesting
                 }
                 catch (IndexOutOfRangeException)
                 {
-                    Debug.LogError($"Invalid testName: {testName}");
+                    logger.LogError($"Invalid testName: {testName}");
                     this.funcName = null;
                     this.typeName = null;
                     this.namespaceName = null;
@@ -85,6 +88,7 @@ namespace Unity.RecordedTesting
 
         void Start()
         {
+            logger = new AQALogger();
             if (AutomatedQARuntimeSettings.hostPlatform == HostPlatform.Cloud && 
                 AutomatedQARuntimeSettings.buildType == BuildType.FullBuild)
             {
@@ -94,7 +98,7 @@ namespace Unity.RecordedTesting
                 Application.quitting += () =>
                 {
 # if UNITY_EDITOR
-                    Debug.Log($"Counters generated - {CloudTestManager.Instance.GetTestResults().ToString()}");
+                    logger.Log($"Counters generated - {CloudTestManager.Instance.GetTestResults().ToString()}");
 #else
                 CloudTestManager.UploadCounters();
 #endif
@@ -105,7 +109,7 @@ namespace Unity.RecordedTesting
                 TextAsset settings = Resources.Load<TextAsset>(Path.GetFileNameWithoutExtension(dfConf.settingsFileToLoad));
                 if (!string.IsNullOrEmpty(dfConf.settingsFileToLoad) && settings != null && !string.IsNullOrEmpty(settings.text))
                 {
-                    Debug.Log($"Updating default Automated QA settings file to {dfConf.settingsFileToLoad}");
+                    logger.Log($"Updating default Automated QA settings file to {dfConf.settingsFileToLoad}");
                     AutomatedQARuntimeSettings.AutomatedQaSettingsFileName = dfConf.settingsFileToLoad;
                     AutomatedQARuntimeSettings.RefreshConfig();
                 }
@@ -133,7 +137,7 @@ namespace Unity.RecordedTesting
             var test = GetTest(testName);
             if (test != null)
             {
-                Debug.Log($"Running test {testName}");
+                logger.Log($"Running test {testName}");
                 yield return StartCoroutine(test.Run());
             }
         }
@@ -145,6 +149,8 @@ namespace Unity.RecordedTesting
 
         public static TestFunction GetTest(string testName)
         {
+            AQALogger logger = new AQALogger();
+
             TestName splitName = new TestName(testName);
 
             Assembly[] assems = AppDomain.CurrentDomain.GetAssemblies();
@@ -173,7 +179,7 @@ namespace Unity.RecordedTesting
                 }
             }
 
-            Debug.LogError($"Test not found: {testName}");
+            logger.LogError($"Test not found: {testName}");
             return null;
         }
 
@@ -198,8 +204,10 @@ namespace Unity.RecordedTesting
 
         private static void SetResult(string testName, bool passed)
         {
+            AQALogger logger = new AQALogger();
+
             CloudTestManager.Instance.SetCounter(testName, passed ? 1 : 0);
-            Debug.Log("Assert result: " + testName + ": " + (passed ? "Pass" : "Fail"));
+            logger.Log("Assert result: " + testName + ": " + (passed ? "Pass" : "Fail"));
         }
     }
     

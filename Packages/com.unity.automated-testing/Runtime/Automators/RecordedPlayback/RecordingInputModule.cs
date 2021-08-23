@@ -2,12 +2,16 @@ using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.IO;
-using Unity.RecordedPlayback;
 using Unity.AutomatedQA;
+using Unity.RecordedPlayback;
+using UnityEditor;
 using UnityEngine.Events;
 using UnityEngine.SceneManagement;
 using UnityEngine.UI;
 using Unity.AutomatedQA.Listeners;
+#if AQA_USE_TMP
+using TMPro;
+#endif
 
 namespace UnityEngine.EventSystems
 {
@@ -21,7 +25,6 @@ namespace UnityEngine.EventSystems
     public class RecordingInputModule : PointerInputModule
     {
         public static RecordingInputModule Instance { get; set; }
-        private static readonly float screenshotDelay = 0.25f; // TODO: use a better value
         private static readonly float dragRateLimit = 0.05f;
         private static readonly string playbackCompleteSignal = "playbackComplete";
         private static readonly string segmentCompleteSignal = "segmentComplete";
@@ -46,6 +49,9 @@ namespace UnityEngine.EventSystems
         private List<TouchData> touchData = new List<TouchData>();
         private TouchData activeDrag;
         private string currentEntryScene;
+        private GameObject lastPressedObject;
+
+        private AQALogger logger;
 
         public RecordingMode RecordingMode
         {
@@ -82,6 +88,12 @@ namespace UnityEngine.EventSystems
         {
         }
 
+        protected override void Awake()
+        {
+            base.Awake();
+            logger = new AQALogger();
+        }
+
         protected override void OnEnable()
         {
             Instance = this;
@@ -89,26 +101,7 @@ namespace UnityEngine.EventSystems
             InitRecordingData();
             InitScenes();
             SendAnalytics();
-            StartCoroutine(TrackFrameRate());
             base.OnEnable();
-        }
-
-        private bool trackingFps = false;
-        private IEnumerator TrackFrameRate()
-        {
-            if (trackingFps)
-            {
-                yield return null;
-            }
-            else
-            {
-                trackingFps = true;
-                while (Application.isPlaying)
-                {
-                    yield return new WaitForSeconds(0.5f);
-                    ReportingManager.SampleFramerate();
-                }
-            }
         }
 
         private void InitConfigData()
@@ -119,6 +112,7 @@ namespace UnityEngine.EventSystems
         private void InitRecordingData()
         {
             lastEventTime = Time.time;
+            RecordableInput.Reset();
             ReportingManager.IsCompositeRecording = false;
             if (IsPlaybackActive() && !ReportingManager.IsTestWithoutRecordingFile)
             {
@@ -217,6 +211,8 @@ namespace UnityEngine.EventSystems
 
         public bool UpdatePlay(int overrideStepIndex = -1)
         {
+            RecordableInput.Update();
+
             //Generated tests may directly choose the step execution order.
             if (overrideStepIndex >= 0)
             {
@@ -240,7 +236,7 @@ namespace UnityEngine.EventSystems
                 }
                 catch (Exception e)
                 {
-                    Debug.LogException(e);
+                    logger.LogException(e);
                 }
             }
 
@@ -254,11 +250,25 @@ namespace UnityEngine.EventSystems
             {
                 touchData = new List<TouchData>();
                 _recordingMode = RecordingMode.Record;
-                Debug.Log("Playback complete, begin recording new segment");
+                logger.Log("Playback complete, begin recording new segment");
             }
             else if (!string.IsNullOrEmpty(td.emitSignal))
             {
+                if (ReportingManager.IsPlaybackStartedFromEditorWindow && !ReportingManager.IsAutomatorTest)
+                {
+                    /*
+                        This is a recording file launched from an editor window.
+                        Its possible that other recordings will be launched from the same play session.
+                        Support that by generating a test and resetting the ReportingManager.
+                    */
+                    ReportingManager.FinalizeReport();
+                    ReportingManager.Reset();
+                }
                 callback.Invoke(td.emitSignal);
+                if (td.emitSignal == playbackCompleteSignal)
+                {
+                    Instance.EndRecording();
+                }
             }
 
             ++_current_index;
@@ -307,7 +317,9 @@ namespace UnityEngine.EventSystems
             if (AutomatedQARuntimeSettings.UseDynamicWaits && isGameObjectTouch)
             {
                 if (targetGameObjectFound == null)
-                    targetGameObjectFound = FindObject(td, GetActiveGameObjects());
+                {
+                    targetGameObjectFound = FindObject(td, ElementQuery.Instance.GetAllActiveGameObjects());
+                }
 
                 bool isTargetReady = false;
                 bool readySelf = targetGameObjectFound != null && targetGameObjectFound.activeSelf && targetGameObjectFound.activeInHierarchy;
@@ -363,14 +375,42 @@ namespace UnityEngine.EventSystems
             return touchData;
         }
 
+        public void SetTouchData(List<TouchData> data)
+        {
+            touchData = data;
+        }
+
         public void AddTouchData(TouchData data)
         {
             touchData.Add(data);
         }
 
+        public void InsertTouchData(int index, params TouchData[] data)
+        {
+            if (index < touchData.Count)
+            {
+                List<TouchData> tds = new List<TouchData>();
+                for (int x = 0; x < touchData.Count; x++)
+                {
+                    if (x == index)
+                    {
+                        tds.AddRange(data);
+                    }
+                    tds.Add(touchData[x]);
+                }
+                touchData = tds;
+            }
+            else
+            {
+                foreach (TouchData td in data)
+                    AddTouchData(td);
+            }
+        }
+
         public void ClearTouchData()
         {
             touchData = new List<TouchData>();
+            _current_index = 0;
         }
 
         void DoAction(int index)
@@ -380,12 +420,13 @@ namespace UnityEngine.EventSystems
                 return;
             }
             var td = touchData[index];
-            if (_recordingMode == RecordingMode.Playback)
+            if (_recordingMode == RecordingMode.Playback || ReportingManager.IsCrawler)
             {
                 ReportingManager.StepData step = new ReportingManager.StepData();
                 step.ActionType = td.eventType.ToString();
                 step.Name = $"{(string.IsNullOrEmpty(td.objectName) ? $"{{Position x{td.position.x} y{td.position.y}}}" : td.objectName)}";
                 step.Hierarchy = string.IsNullOrEmpty(td.objectHierarchy) ? "{N/A}" : td.objectHierarchy;
+                step.QuerySelector = string.IsNullOrEmpty(td.querySelector) ? "{N/A}" : td.querySelector;
                 ReportingManager.AddStep(step);
             }
             if (td.eventType != TouchData.type.drag)
@@ -393,8 +434,10 @@ namespace UnityEngine.EventSystems
                 CaptureScreenshots();
             }
 
-            Vector2 pos = GetTouchPosition(td);
-            if (_recordingMode == RecordingMode.Playback)
+            List<GameObject> objPool = ElementQuery.Instance.GetAllActiveGameObjects();
+            GameObject targetObject = FindObject(td, objPool);
+            Vector2 pos = GetTouchPosition(td, targetObject);
+            if (_recordingMode == RecordingMode.Playback || ReportingManager.IsCrawler)
             {
                 ReportingManager.UpdateCurrentStep(pos);
             }
@@ -406,14 +449,10 @@ namespace UnityEngine.EventSystems
             touch.pressure = 1.0f; // standard touch is 1
             touch.maximumPossiblePressure = 1.0f;
             touch.type = TouchType.Direct;
-            //touch.altitudeAngle = 0;
-            //touch.azimuthAngle = 0;
-            //touch.radius = 0;
-            //touch.radiusVariance = 0;
 
-            DebugLog(td.HasObject() && !td.positional && td.eventType != TouchData.type.drag
-                ? $"Simulating {td.eventType} on object {td.objectName}"
-                : $"Simulating {td.eventType} at screen position {td.GetScreenPosition()}");
+            logger.LogDebug(td.HasObject() && !td.positional && td.eventType != TouchData.type.drag
+                ? $"Simulating {td.eventType} on object {td.GetObjectIdentifier()} at {touch.position}"
+                : $"Simulating {td.eventType} at screen position {touch.position}");
 
             if (td.eventType == TouchData.type.input)
             {
@@ -422,7 +461,26 @@ namespace UnityEngine.EventSystems
             else if (td.eventType == TouchData.type.press)
             {
                 touch.phase = TouchPhase.Began;
-                falseTouches.Add(touch);
+                automationEvents.Add(new AutomationEvent(touch, td.button));
+                lastPressedObject = targetObject;
+
+                // Simulate fake action in the old input system
+                if (index + 1 < touchData.Count && touchData[index + 1].eventType == TouchData.type.release)
+                {
+                    var nextTd = touchData[index + 1];
+                    var upPos = pos + nextTd.GetScreenPosition() - td.GetScreenPosition();
+                    if (nextTd.HasObject() && nextTd.objectName != td.objectName)
+                    {
+                        upPos = GetTouchPosition(nextTd);
+                    }
+                    RecordableInput.FakeButtonDown(0, pos, upPos, nextTd.timeDelta);
+                    RecordableInput.FakeTouch(touch, upPos, nextTd.timeDelta);
+                }
+                else
+                {
+                    RecordableInput.FakeButtonDown(0, pos, pos);
+                }
+
                 VisualFxManager.Instance.TriggerPulseOnTarget(pos, true);
             }
             else if (td.eventType == TouchData.type.drag)
@@ -430,7 +488,7 @@ namespace UnityEngine.EventSystems
 
                 touch.deltaTime = td.timeDelta;
                 touch.phase = TouchPhase.Moved;
-                falseTouches.Add(touch);
+                automationEvents.Add(new AutomationEvent(touch, td.button));
 
                 if (td.HasObject() && index < touchData.Count - 1)
                 {
@@ -441,7 +499,7 @@ namespace UnityEngine.EventSystems
                         if (drop.HasObject())
                         {
                             dropPos = GetTouchPosition(drop);
-                            if (_recordingMode == RecordingMode.Playback)
+                            if (_recordingMode == RecordingMode.Playback || ReportingManager.IsCrawler)
                             {
                                 ReportingManager.UpdateCurrentStep(dropPos);
                             }
@@ -455,7 +513,20 @@ namespace UnityEngine.EventSystems
             else if (td.eventType == TouchData.type.release)
             {
                 touch.phase = TouchPhase.Ended;
-                falseTouches.Add(touch);
+                automationEvents.Add(new AutomationEvent(touch, td.button));
+
+                // Invoke click action if press and release happen on the same object
+                if (targetObject != null)
+                {
+                    var hasGameElement = targetObject.TryGetComponent(out GameElement gameElement);
+                    if (hasGameElement && lastPressedObject != null && td.objectName == lastPressedObject.name)
+                    {
+                        gameElement.OnClickAction();
+                    }
+
+                    lastPressedObject = null;
+                }
+
                 VisualFxManager.Instance.TriggerPulseOnTarget(pos, false);
                 VisualFxManager.Instance.TriggerDragFeedback(true, pos);
             }
@@ -471,14 +542,20 @@ namespace UnityEngine.EventSystems
         /// <returns></returns>
         private GameObject FindObject(TouchData td, List<GameObject> objPool)
         {
+            // Advanced finding through query selectors takes precidence.
+            if (!string.IsNullOrEmpty(td.querySelector))
+            {
+                return ElementQuery.Find(td.querySelector);
+            }
+
             if (td.objectTag != "Untagged" && !string.IsNullOrEmpty(td.objectTag))
             {
                 var gameObjects = GameObject.FindGameObjectsWithTag(td.objectTag);
-                foreach (var gameObject in gameObjects)
+                foreach (var obj in gameObjects)
                 {
-                    if (gameObject.name == td.objectName)
+                    if (obj.name == td.objectName)
                     {
-                        return gameObject;
+                        return obj;
                     }
                 }
             }
@@ -486,76 +563,40 @@ namespace UnityEngine.EventSystems
             var maxOutliers = int.MaxValue;
             var foundObjects = 0;
             GameObject result = null;
-            foreach (GameObject gameObject in objPool)
+            foreach (GameObject obj in objPool)
             {
-                if (gameObject.name == td.objectName)
+                if (obj.name == td.objectName)
                 {
                     foundObjects++;
-                    var h1 = new HashSet<string>(GetHierarchy(gameObject));
+                    var h1 = new HashSet<string>(GetHierarchy(obj));
                     var h2 = new HashSet<string>(td.objectHierarchy.Split('/'));
                     h1.SymmetricExceptWith(h2);
 
                     var outliers = h1.Count;
                     if (outliers < maxOutliers || result == null)
                     {
-                        result = gameObject;
+                        foundObjects = 1;
+                        result = obj;
                         maxOutliers = outliers;
+                    }
+                }
+                else
+                {
+                    var hasGameElement = obj.TryGetComponent(out GameElement gameElement);
+                    if (hasGameElement && gameElement.isActiveAndEnabled && obj.name == td.objectName)
+                    {
+                        return obj;
                     }
                 }
             }
 
-            if (maxOutliers != 0 && foundObjects > 0 && !hierarchyWarnings.Contains(td.objectHierarchy))
+            if (maxOutliers != 0 && foundObjects > 1 && !hierarchyWarnings.Contains(td.objectHierarchy))
             {
-                Debug.LogWarning($"Object hierarchy {td.objectHierarchy} has been changed, please update the recording file with the new path");
+                logger.LogWarning($"Object hierarchy {td.objectHierarchy} has been changed, please update the recording file with the new path");
                 hierarchyWarnings.Add(td.objectHierarchy);
             }
 
             return result;
-        }
-
-        public List<GameObject> GetActiveGameObjects()
-        {
-            List<GameObject> results = new List<GameObject>();
-            var scenes = GetOpenScenes();
-            foreach (var scene in scenes)
-            {
-                results.AddRange(GetChildren(scene.GetRootGameObjects().ToList()));
-            }
-            return results.FindAll(x => x.activeInHierarchy && x.activeSelf);
-        }
-
-        public static List<GameObject> GetChildren(List<GameObject> objs)
-        {
-            List<GameObject> results = new List<GameObject>();
-            foreach (GameObject obj in objs)
-            {
-                results.Add(obj);
-                foreach (Transform trans in obj.transform)
-                {
-                    results.AddRange(GetChildren(new List<GameObject>() { trans.gameObject }));
-                }
-            }
-            return results;
-        }
-
-        private List<Scene> GetOpenScenes()
-        {
-            var scenes = new List<Scene>();
-            for (int s = 0; s < SceneManager.sceneCount; s++)
-            {
-                Scene thisScene = SceneManager.GetSceneAt(s);
-                if (thisScene.isLoaded)
-                {
-                    scenes.Add(thisScene);
-                }
-            }
-
-            if (dontDestroyOnLoadScene.HasValue)
-            {
-                scenes.Add(dontDestroyOnLoadScene.Value);
-            }
-
-            return scenes;
         }
 
         internal List<string> GetHierarchy(GameObject gameObject)
@@ -581,30 +622,64 @@ namespace UnityEngine.EventSystems
 
             List<RaycastResult> raycastResults = new List<RaycastResult>();
 
+            RaycastResult? result = null;
+
+            float minX = 0;
+            float minY = 0;
             for (float x = 0; x < 1; x += .01f)
             {
                 for (float y = 0; y < 1; y += .01f)
                 {
                     var testPos = new Vector2(x * Screen.width, y * Screen.height);
-                    var result = FindObjectWithRaycast(gameObject, testPos, raycastResults);
-                    if (result != null)
+                    var testResult = FindObjectWithRaycast(gameObject, testPos, raycastResults);
+                    if (testResult != null)
                     {
-                        return result;
+                        minX = x;
+                        minY = y;
+                        result = testResult;
+                        goto LoopEnd;
                     }
-                    raycastResults.Clear();
                 }
+            }
+
+            LoopEnd:
+            if (result != null)
+            {
+                return FindObjectCenter(gameObject, minX, minY, raycastResults);
             }
 
             return null;
         }
 
-        private RaycastResult? FindObjectWithRaycast(GameObject gameObject, Vector2 pos, List<RaycastResult> raycastResults = null)
+        private RaycastResult? FindObjectCenter(GameObject obj, float minX, float minY, List<RaycastResult> raycastResults)
+        {
+            float maxX = minX;
+            float maxY = minY;
+            for (float i = 0; i < 1 - minX; i += .01f)
+            {
+                var testPos = new Vector2((i + minX) * Screen.width, (i + minY) * Screen.height);
+                var testResult = FindObjectWithRaycast(obj, testPos, raycastResults);
+                if (testResult == null)
+                {
+                    break;
+                }
+
+                maxX = Math.Max(i + minX, maxX);
+                maxY = Math.Max(i + minY, maxY);
+            }
+
+            var centerPos = new Vector2((minX + maxX) / 2 * Screen.width, (minY + maxY) / 2 * Screen.height);
+            return FindObjectWithRaycast(obj, centerPos, raycastResults);
+        }
+
+        private RaycastResult? FindObjectWithRaycast(GameObject obj, Vector2 pos, List<RaycastResult> raycastResults = null)
         {
             if (raycastResults == null)
             {
                 raycastResults = new List<RaycastResult>();
             }
 
+            raycastResults.Clear();
             EventSystem.current.RaycastAll(new PointerEventData(EventSystem.current) { position = pos }, raycastResults);
             if (raycastResults.Count > 0)
             {
@@ -613,7 +688,7 @@ namespace UnityEngine.EventSystems
                     var currentObject = result.gameObject;
                     while (currentObject != null)
                     {
-                        if (currentObject == gameObject)
+                        if (currentObject == obj)
                         {
                             return result;
                         }
@@ -623,28 +698,53 @@ namespace UnityEngine.EventSystems
                 }
             }
 
+            // TODO: extra raycasts could be bad in the case where we have to crawl the screen
+            var gameElement = FindGameElementObject(Camera.main, pos);
+            if (gameElement != null && gameElement.gameObject == obj)
+            {
+                return new RaycastResult{screenPosition = pos};
+            }
+
             return null;
         }
 
-        private Vector2 GetTouchPosition(TouchData td)
+        private GameElement FindGameElementObject(Camera cam, Vector2 pos)
+        {
+            GameElement gameElement;
+            var ray = cam.ScreenPointToRay(pos);
+            var hit2D = Physics2D.GetRayIntersection(ray);
+            if (hit2D.collider != null && hit2D.collider.gameObject.TryGetComponent(out gameElement))
+            {
+                return gameElement;
+            }
+            if (Physics.Raycast(ray, out RaycastHit hit) && hit.collider.gameObject.TryGetComponent(out gameElement))
+            {
+                return gameElement;
+            }
+
+            return null;
+        }
+
+        private Vector2 GetTouchPosition(TouchData td, GameObject target = null)
         {
             if (td.positional || !td.HasObject())
             {
                 return td.GetScreenPosition();
             }
 
-            // If we are using dynamic waits for target readiness, then we may have already done this check and recorded the target position.
-            if (AutomatedQARuntimeSettings.UseDynamicWaits && targetOriginData == td && targetGameObjectFound != null && targetChecked)
+            if (target == null)
             {
-                if (targetIsNotOverlappedByOtherObjects)
+                if (!string.IsNullOrEmpty(td.querySelector))
                 {
-                    return targetPositionFromOffset;
+                    target = ElementQuery.Find(td.querySelector);
                 }
-                ThrowGameObjectWillInterceptClickError();
-            }
 
-            List<GameObject> objPool = GetActiveGameObjects();
-            var target = FindObject(td, objPool);
+                if (target == null)
+                {
+                    List<GameObject> objPool = ElementQuery.Instance.GetAllActiveGameObjects();
+                    target = FindObject(td, objPool);
+                }
+            }
 
             // Check if the GameObject is in the visible camera frustum.
             if (target != null)
@@ -657,20 +757,41 @@ namespace UnityEngine.EventSystems
                     Camera eventCamera = GetEventCameraForCanvasChild(target);
                     targetPositionFromOffset = RectTransformUtility.WorldToScreenPoint(eventCamera, rectTransform.TransformPoint(localPos));
 
-                    // Is the target object rendered within the camera frustum, and thus visible on screen.
-                    ValidateObjectIsVisibleOnScreen(targetPositionFromOffset, td.objectName);
+                    if (FindObjectWithRaycast(target, targetPositionFromOffset) != null)
+                    {
+                        // Is the target object rendered within the camera frustum, and thus visible on screen.
+                        ValidateObjectIsVisibleOnScreen(targetPositionFromOffset, td.objectName);
 
-                    // Determine if the click coordinates in the target GameObject would be intercepted by another GameObject that is rendered on top of it.
-                    NoOverlappingObjectWillInterceptClick(target, targetPositionFromOffset, td.objectName);
+                        // Determine if the click coordinates in the target GameObject would be intercepted by another GameObject that is rendered on top of it.
+                        NoOverlappingObjectWillInterceptClick(target, targetPositionFromOffset, td.objectName);
+                        return targetPositionFromOffset;
+                    }
+                }
+
+                var cam = GetEventCameraForCanvasChild(target)?? Camera.main;
+                var objPos = cam.WorldToScreenPoint(target.transform.position);
+                var testResult = FindObjectWithRaycast(target, objPos);
+                if (testResult.HasValue)
+                {
+                    return testResult.Value.screenPosition;
+                }
+            }
+
+            // If we are using dynamic waits for target readiness, then we may have already done this check and recorded the target position.
+            if (AutomatedQARuntimeSettings.UseDynamicWaits && targetOriginData == td && targetGameObjectFound != null && targetChecked)
+            {
+                if (targetIsNotOverlappedByOtherObjects)
+                {
                     return targetPositionFromOffset;
                 }
+                ThrowGameObjectWillInterceptClickError();
             }
 
             var raycastResult = FindRayForObject(target);
             if (raycastResult == null)
             {
                 // Throw error if object is not found to fail unit tests.
-                Debug.LogError($"Cannot play recorded action: object {td.objectName} does not exist or is not viewable on screen. Ensure the object exists and reposition the object inside the screen space.");
+                logger.LogError($"Cannot play recorded action: object {td.GetObjectIdentifier()} does not exist or is not viewable on screen. Ensure the object exists and reposition the object inside the screen space.");
                 // TODO skip this touch event?
                 return td.GetScreenPosition();
             }
@@ -682,7 +803,7 @@ namespace UnityEngine.EventSystems
         /// </summary>
         /// <param name="gameObject"></param>
         /// <returns></returns>
-        private Camera GetEventCameraForCanvasChild(GameObject gameObject)
+        internal Camera GetEventCameraForCanvasChild(GameObject gameObject)
         {
             Camera eventCamera = null;
             GameObject canvasGo = gameObject;
@@ -702,7 +823,7 @@ namespace UnityEngine.EventSystems
             return eventCamera;
         }
 
-        private void ValidateObjectIsVisibleOnScreen(Vector3 positionFromoffset, string nameOfObject)
+        internal void ValidateObjectIsVisibleOnScreen(Vector3 positionFromoffset, string nameOfObject)
         {
             float distRectX = Vector3.Distance(new Vector3(Screen.width / 2, 0f, 0f), new Vector3(positionFromoffset.x, 0f, 0f));
             float distRectY = Vector3.Distance(new Vector3(0f, Screen.height / 2, 0f), new Vector3(0f, positionFromoffset.y, 0f));
@@ -710,7 +831,13 @@ namespace UnityEngine.EventSystems
             // Determine if the click coordinates in the target GameObject are off the screen.
             if (distRectX > Screen.width / 2 || distRectY > Screen.height / 2)
             {
-                Debug.LogError($"Click position recorded relative to spot within the target GameObject \"{nameOfObject}\" is positioned outside of the camera frustum (is not visible to the camera). " +
+                if (ReportingManager.IsCrawler)
+                {
+                    // Remove this action as the GameObject cannot be interacted with.
+                    touchData.RemoveAt(touchData.Count - 1);
+                    return;
+                }
+                logger.LogError($"Click position recorded relative to spot within the target GameObject \"{nameOfObject}\" is positioned outside of the camera frustum (is not visible to the camera). " +
                    $"Since this is a GameObject in the UI layer, this may mean that the object has not scaled or positioned properly in the current aspect ratio ({Screen.width}w X {Screen.height}h) and current resolution ({Screen.currentResolution.width} X {Screen.currentResolution.height}) compared to the recorded aspect ratio ({RecordedPlaybackPersistentData.RecordedAspectRatio.x}h X {RecordedPlaybackPersistentData.RecordedAspectRatio.y}w) and recorded resolution ({RecordedPlaybackPersistentData.RecordedResolution.x} X {RecordedPlaybackPersistentData.RecordedResolution.y}).");
             }
         }
@@ -720,7 +847,7 @@ namespace UnityEngine.EventSystems
         /// </summary>
         /// <param name="isSoftCheck">If true, no asserted failure will occur when overlapping objects are found, and we will simply notify the caller.</param>
         /// <returns></returns>
-        private bool NoOverlappingObjectWillInterceptClick(GameObject target, Vector3 posFromOffset, string nameOfObject, bool isSoftCheck = false)
+        internal bool NoOverlappingObjectWillInterceptClick(GameObject target, Vector3 posFromOffset, string nameOfObject, bool isSoftCheck = false)
         {
             List<RaycastResult> raycastResults = new List<RaycastResult>();
             EventSystem.current.RaycastAll(new PointerEventData(EventSystem.current) { position = posFromOffset }, raycastResults);
@@ -755,6 +882,12 @@ namespace UnityEngine.EventSystems
                         {
                             return false;
                         }
+                        if (ReportingManager.IsCrawler)
+                        {
+                            // Remove this action as the GameObject cannot be interacted with.
+                            touchData.RemoveAt(touchData.Count - 1);
+                            return false;
+                        }
                         ThrowGameObjectWillInterceptClickError();
                     }
                 }
@@ -764,39 +897,80 @@ namespace UnityEngine.EventSystems
 
         private void ThrowGameObjectWillInterceptClickError()
         {
-            Debug.LogError($"Click position recorded relative to spot within the target GameObject \"{targetGameObjectFound.name}\" would be caught by the wrong GameObject, which is overlapping the target GameObject at the click coordinates. " +
+            logger.LogError($"Click position recorded relative to spot within the target GameObject \"{targetGameObjectFound.name}\" would be caught by the wrong GameObject, which is overlapping the target GameObject at the click coordinates. " +
                         $"Since this is a GameObject in the UI layer, this may mean that the object has not scaled or positioned properly in the current aspect ratio ({Screen.width}w X {Screen.height}h) and current resolution ({Screen.currentResolution.width} X {Screen.currentResolution.height}) compared to the recorded aspect ratio ({RecordedPlaybackPersistentData.RecordedAspectRatio.x}h X {RecordedPlaybackPersistentData.RecordedAspectRatio.y}w) and recorded resolution ({RecordedPlaybackPersistentData.RecordedResolution.x} X {RecordedPlaybackPersistentData.RecordedResolution.y}).");
 
         }
 
         private IEnumerator InputText(TouchData td)
         {
-            GameObject input = FindObject(td, GetActiveGameObjects());
+            GameObject input = null;
+            if (!string.IsNullOrEmpty(td.querySelector))
+            {
+                input = ElementQuery.Find(td.querySelector);
+            }
+
             if (input == null)
-                Debug.LogError($"Input field could not be found [Name:{td.objectName}] [Hierarchy:{td.objectHierarchy}]");
-            InputField inputField = input.GetComponent<InputField>();
-            inputField.text = string.Empty;
+                input = FindObject(td, ElementQuery.Instance.GetAllActiveGameObjects());
+
+            if (input == null)
+                logger.LogError($"Input field could not be found [Name:{td.objectName}] [Hierarchy:{td.objectHierarchy}]");
+
+            InputField inputField = null;
+            if(input.TryGetComponent(out inputField))
+            {
+                inputField.text = string.Empty;
+            }
+
+#if AQA_USE_TMP
+            TMP_InputField tmpInputField = null;
+            if (!input.TryGetComponent(out tmpInputField))
+            {
+                // If this object does not have a TMP_InputField component, it's grandparent GameObject might.
+                if (inputField == null && tmpInputField == null)
+                {
+                    if (input.TryGetComponent(out TMP_Text tmpText))
+                    {
+                        GameObject go1 = input.transform.parent.gameObject;
+                        if (!go1.TryGetComponent(out tmpInputField))
+                        {
+                            GameObject go2 = go1.transform.parent.gameObject;
+                            if (!go2.TryGetComponent(out tmpInputField))
+                            {
+                                AQALogger logger = new AQALogger();
+                                logger.LogError($"Could not find TMP_InputField associated with text field (Selector: {(string.IsNullOrEmpty(td.querySelector) ? td.objectName : td.querySelector)}).");
+                            }
+                        }
+                    }
+                }
+            }
+            if (tmpInputField != null)
+            {
+                tmpInputField.text = string.Empty;
+            }
+#endif
 
             // If an input action started quickly after the input field was clicked, a pulse action may be obscuring what we type.
             if (VisualFxManager.ActivePulseManagers.Any())
                 VisualFxManager.ReturnVisualFxCanvas(VisualFxManager.ActivePulseManagers.Last().gameObject);
             VisualFxManager.Instance.TriggerHighlightAroundTarget(input);
 
-            // Get the time between each letter to wait, simulating typing. Do not exceed a time that would 
+            // Get the time between each letter to wait, simulating typing. Do not exceed a time that would
             float timeBetweenLetters = td.inputDuration / td.inputText.Length;
             for (int i = 0; i < td.inputText.Length; i++)
             {
-                inputField.text += td.inputText[i];
+#if AQA_USE_TMP
+                if (tmpInputField != null)
+                {
+                    tmpInputField.text += td.inputText[i];
+                } else
+#endif
+                if(inputField != null)
+                {
+                    inputField.text += td.inputText[i];
+                }
                 if (i < td.inputText.Length - 1)
                     yield return new WaitForSeconds(timeBetweenLetters);
-            }
-        }
-
-        private void DebugLog(string msg)
-        {
-            if (AutomatedQARuntimeSettings.EnableScreenshots)
-            {
-                Debug.Log(msg);
             }
         }
 
@@ -891,7 +1065,7 @@ namespace UnityEngine.EventSystems
                 case OperatingSystemFamily.Linux:
                 case OperatingSystemFamily.MacOSX:
 #if UNITY_EDITOR
-                    if (UnityEditor.EditorApplication.isRemoteConnected)
+                    if (EditorApplication.isRemoteConnected)
                         return false;
 #endif
                     return true;
@@ -1084,7 +1258,7 @@ namespace UnityEngine.EventSystems
             return input.touchCount > 0;
         }
 
-        private List<Touch> falseTouches = new List<Touch>();
+        private List<AutomationEvent> automationEvents = new List<AutomationEvent>();
 
         private void ProcessSyntheticTouchEvents()
         {
@@ -1093,14 +1267,17 @@ namespace UnityEngine.EventSystems
                 return;
             }
 
-            foreach (var touch in falseTouches)
+            foreach (var automationEvent in automationEvents)
             {
+                Touch touch = automationEvent.touch;
                 if (touch.type == TouchType.Indirect)
                 {
                     continue;
                 }
 
                 var pointer = GetTouchPointerEventData(touch, out var pressed, out var released);
+                pointer.pointerId = touch.fingerId;
+                pointer.button = automationEvent.button;
 
                 ProcessTouchPress(pointer, pressed, released);
 
@@ -1115,7 +1292,7 @@ namespace UnityEngine.EventSystems
                 }
             }
 
-            falseTouches.Clear();
+            automationEvents.Clear();
         }
 
         /// <summary>
@@ -1159,8 +1336,6 @@ namespace UnityEngine.EventSystems
                 if (newPressed == null)
                     newPressed = ExecuteEvents.GetEventHandler<IPointerClickHandler>(currentOverGo);
 
-                // Debug.Log("Pressed: " + newPressed);
-
                 float time = Time.unscaledTime;
 
                 if (newPressed == pointerEvent.lastPress)
@@ -1201,10 +1376,7 @@ namespace UnityEngine.EventSystems
                 return;
             }
 
-            // Debug.Log("Executing press up on: " + pointer.pointerPress);
             ExecuteEvents.Execute(pointerEvent.pointerPress, pointerEvent, ExecuteEvents.pointerUpHandler);
-
-            // Debug.Log("KeyCode: " + pointer.eventData.keyCode);
 
             // see if we mouse up on the same element that we clicked on...
             var pointerUpHandler = ExecuteEvents.GetEventHandler<IPointerClickHandler>(currentOverGo);
@@ -1392,7 +1564,7 @@ namespace UnityEngine.EventSystems
         private void PressMouse(PointerEventData pointerEvent, GameObject currentOverGo)
         {
             // Without an onFocusLeave event, we need to consider a mouse press to be the end of any ongoing text input action.
-            KeyInputHandler.FinalizeAnyTextInputInProgress();
+            GameListenerHandler.FinalizeAnyTextInputInProgress();
 
             pointerEvent.eligibleForClick = true;
             pointerEvent.delta = Vector2.zero;
@@ -1411,8 +1583,6 @@ namespace UnityEngine.EventSystems
             // didn't find a press handler... search for a click handler
             if (newPressed == null)
                 newPressed = ExecuteEvents.GetEventHandler<IPointerClickHandler>(currentOverGo);
-
-            // Debug.Log("Pressed: " + newPressed);
 
             float time = Time.unscaledTime;
 
@@ -1489,7 +1659,7 @@ namespace UnityEngine.EventSystems
             touchData.Add(td);
         }
 
-        private TouchData AddTouchData(PointerEventData pointerEvent, TouchData.type type, GameObject activeObject = null)
+        internal TouchData AddTouchData(PointerEventData pointerEvent, TouchData.type type, GameObject activeObject = null)
         {
             TouchData td = null;
             if (_recordingMode == RecordingMode.Record)
@@ -1502,18 +1672,32 @@ namespace UnityEngine.EventSystems
                     position = new Vector2(pointerEvent.position.x / Screen.width,
                         pointerEvent.position.y / Screen.height),
                     positional = activeObject == null,
-                    scene = SceneManager.GetActiveScene().name
+                    scene = SceneManager.GetActiveScene().name,
+                    button = pointerEvent.button
                 };
+
+                // Look for an object with a RecordingListener attached
+                if (activeObject == null)
+                {
+                    var recordableObject = FindGameElementObject(Camera.main, pointerEvent.position);
+                    if (recordableObject != null)
+                    {
+                        td.positional = false;
+                        activeObject = recordableObject.gameObject;
+                    }
+                }
 
                 if (activeObject != null)
                 {
 #if UNITY_EDITOR
-                    UnityEditor.Selection.activeGameObject = activeObject;
+                    Selection.activeGameObject = activeObject;
 #endif
                     td.objectName = activeObject.name;
                     td.objectTag = activeObject.tag;
                     td.objectHierarchy = string.Join("/", GetHierarchy(activeObject));
+                    td.querySelector = ElementQuery.ConstructQuerySelectorString(activeObject);
 
+                    // calculate offset inside the object
                     RectTransform rectTransform;
                     if (activeObject.TryGetComponent(out rectTransform))
                     {
@@ -1537,8 +1721,8 @@ namespace UnityEngine.EventSystems
                 }
                 lastEventTime += td.timeDelta;
 
-                DebugLog(td.HasObject() && !td.positional
-                    ? $"Recording new {td.eventType} on object {td.objectName}"
+                logger.LogDebug(td.HasObject() && !td.positional
+                    ? $"Recording new {td.eventType} on object {td.GetObjectIdentifier()}"
                     : $"Recording new {td.eventType} at screen position {td.GetScreenPosition()}");
                 touchData.Add(td);
             }
@@ -1546,7 +1730,7 @@ namespace UnityEngine.EventSystems
             return td;
         }
 
-        private List<TouchData> InterpolateDragEvents(int index, Vector2 startPos, Vector2 endPos)
+        internal List<TouchData> InterpolateDragEvents(int index, Vector2 startPos, Vector2 endPos)
         {
             var newTouchData = new List<TouchData>();
             for (int i = 0; i < touchData.Count; i++)
@@ -1599,6 +1783,12 @@ namespace UnityEngine.EventSystems
 
         public void SaveRecordingSegment()
         {
+            if (touchData.Count == 0)
+            {
+                logger.Log("List of recorded actions in this segment is empty");
+                return;
+            }
+
             var endEvent = new TouchData
             {
                 eventType = TouchData.type.none,
@@ -1611,7 +1801,7 @@ namespace UnityEngine.EventSystems
             var epoch = ((DateTimeOffset)start).ToUnixTimeSeconds();
             var filename = $"recording_segment_{_recordingData.recordings.Count}_{epoch}.json";
             var filepath = Path.Combine(AutomatedQARuntimeSettings.PersistentDataPath, filename);
-            Debug.Log($"Writing {filepath}");
+            logger.Log($"Writing {filepath}");
             var recordedSegment = new InputModuleRecordingData(touchData);
             recordedSegment.entryScene = string.IsNullOrEmpty(currentEntryScene) ? _recordingData.entryScene : currentEntryScene;
             recordedSegment.SaveToFile(filepath);
@@ -1628,8 +1818,13 @@ namespace UnityEngine.EventSystems
             if (AutomatedQARuntimeSettings.EnableScreenshots)
             {
                 StartCoroutine(CaptureScreenshot(0f));
-                StartCoroutine(CaptureScreenshot(screenshotDelay));
+                StartCoroutine(CaptureScreenshot(AutomatedQARuntimeSettings.PostActionScreenshotDelay));
             }
+        }
+
+        public static void Screenshot()
+        {
+            if (Instance != null) Instance.CaptureScreenshots();
         }
 
         private IEnumerator CaptureScreenshot(float delaySeconds)
@@ -1651,7 +1846,7 @@ namespace UnityEngine.EventSystems
 #endif
 
             Directory.CreateDirectory(path);
-            if (_recordingMode == RecordingMode.Playback)
+            if (_recordingMode == RecordingMode.Playback || ReportingManager.IsCrawler)
             {
                 ReportingManager.AddScreenshot(file);
             }
@@ -1659,32 +1854,24 @@ namespace UnityEngine.EventSystems
         }
 
         // On Mac manually capture the screenshot to avoid "ignoring depth surface" warnings that come from ScreenCapture.CaptureScreenshot
-        IEnumerator CaptureScreenshot(string path)
+        private IEnumerator CaptureScreenshot(string path)
         {
-            yield return new WaitForEndOfFrame();
-
-#if UNITY_EDITOR_OSX || UNITY_STANDALONE_OSX
-            Texture2D screenImage = new Texture2D(Screen.width, Screen.height, TextureFormat.RGB24, false);
-            screenImage.ReadPixels(new Rect(0, 0, Screen.width, Screen.height), 0, 0);
-            screenImage.Apply();
-            byte[] imageBytes = screenImage.EncodeToPNG();
-
-            File.WriteAllBytes(path, imageBytes);
-#else
-            ScreenCapture.CaptureScreenshot(path);
-#endif
-        }
-
-        /// <summary>
-        /// For Windows Store & Android "end state" callback logic.
-        /// </summary>
-        /// <param name="pause"></param>
-        private void OnApplicationFocus(bool hasFocus)
-        {
-            if (!hasFocus && !Application.isEditor)
+            // Do not take screenshots in batchmode due to it not supporting the code "yield return new WaitForEndOfFrame()", which is required for both screenshot methods to function correctly.
+            if (!Application.isBatchMode)
             {
-                EndRecording();
+                yield return new WaitForEndOfFrame();
+#if UNITY_EDITOR_OSX || UNITY_STANDALONE_OSX
+                Texture2D screenImage = new Texture2D(Screen.width, Screen.height, TextureFormat.RGB24, false);
+                screenImage.ReadPixels(new Rect(0, 0, Screen.width, Screen.height), 0, 0);
+                screenImage.Apply();
+                byte[] imageBytes = screenImage.EncodeToPNG();
+
+                File.WriteAllBytes(path, imageBytes);
+#else
+                ScreenCapture.CaptureScreenshot(path);
+#endif
             }
+            yield return null;
         }
 
         private void OnApplicationQuit()
@@ -1694,7 +1881,13 @@ namespace UnityEngine.EventSystems
 
         public void EndRecording()
         {
-            if (touchData.Count == 0)
+            if ((_recordingMode != RecordingMode.Record && !ReportingManager.IsCrawler) && !ReportingManager.IsPlaybackStartedFromEditorWindow)
+                return;
+
+            if (ReportingManager.IsCrawler)
+                touchData.Add(GameCrawler.EMIT_COMPLETE);
+
+            if (touchData.Count == 0 && _recordingData.recordings.Count == 0)
             {
                 RecordedPlaybackController.Instance.Reset();
                 return;
@@ -1704,23 +1897,20 @@ namespace UnityEngine.EventSystems
                 SaveRecordingSegment();
             }
 
-            if (_recordingMode == RecordingMode.Record)
-            {
-                _recordingData.touchData = touchData;
-                _recordingData.AddPlaybackCompleteEvent(GetElapsedTime());
-                _recordingData.recordedAspectRatio = new Vector2(Screen.width, Screen.height);
-                _recordingData.recordedResolution = new Vector2(Screen.currentResolution.width, Screen.currentResolution.height);
-                RecordedPlaybackPersistentData.SetRecordingData(_recordingData);
-            }
-            else if (_recordingMode == RecordingMode.Playback)
-            {
-                ReportingManager.FinalizeReport();
-                RecordedPlaybackPersistentData.CleanRecordingData();
-            }
-
+            GameListenerHandler.FinalizeAnyTextInputInProgress(); // In case the very last action was typing into a text field, but no action was taken afterwords to trigger the end of the input step's recording.
+            _recordingData.touchData = touchData;
+            _recordingData.AddPlaybackCompleteEvent(GetElapsedTime());
+            _recordingData.recordedAspectRatio = new Vector2(Screen.width, Screen.height);
+            _recordingData.recordedResolution = new Vector2(Screen.currentResolution.width, Screen.currentResolution.height);
+            RecordedPlaybackPersistentData.SetRecordingData(_recordingData);
             touchData = new List<TouchData>();
-            RecordedPlaybackController.Instance.Reset();
-            isWorkInProgress = false;
+
+            // Allows multiple recordings to be played in the same session.
+            if (!ReportingManager.IsAutomatorTest && !ReportingManager.IsCrawler)
+            {
+                RecordedPlaybackController.Instance.Reset();
+            }
+            ReportingManager.IsPlaybackStartedFromEditorWindow = isWorkInProgress = false;
         }
 
         [Serializable]
@@ -1732,6 +1922,7 @@ namespace UnityEngine.EventSystems
             public Vector2 position;
             public bool positional;
             public string scene;
+            public PointerEventData.InputButton button;
 
             public string waitSignal;
             public string emitSignal;
@@ -1743,6 +1934,7 @@ namespace UnityEngine.EventSystems
             public string objectName;
             public string objectTag;
             public string objectHierarchy;
+            public string querySelector;
             public Vector2 objectOffset;
 
             public enum type
@@ -1766,6 +1958,29 @@ namespace UnityEngine.EventSystems
             {
                 return new Vector2(position.x * Screen.width, position.y * Screen.height);
             }
+
+            public string GetObjectIdentifier()
+            {
+                if (!string.IsNullOrEmpty(querySelector))
+                {
+                    return querySelector;
+                }
+
+                return objectName;
+            }
+        }
+
+        [Serializable]
+        private struct AutomationEvent
+        {
+            public Touch touch;
+            public PointerEventData.InputButton button;
+
+            public AutomationEvent(Touch touch, PointerEventData.InputButton button)
+            {
+                this.touch = touch;
+                this.button = button;
+            }
         }
 
         [Serializable]
@@ -1777,6 +1992,8 @@ namespace UnityEngine.EventSystems
         [Serializable]
         public class InputModuleRecordingData : BaseRecordingData
         {
+            private AQALogger logger = new AQALogger();
+
             public string entryScene = string.Empty;
             public type recordingType;
             public Vector2 recordedAspectRatio;
@@ -1808,7 +2025,7 @@ namespace UnityEngine.EventSystems
             {
                 if (depth >= 10)
                 {
-                    Debug.LogError($"Recursive limit exceeded while reading file segments,");
+                    logger.LogError($"Recursive limit exceeded while reading file segments,");
                     return new List<TouchData>();
                 }
 
@@ -1816,7 +2033,7 @@ namespace UnityEngine.EventSystems
                 List<TouchData> combinedTouchData = new List<TouchData>();
                 foreach (var recording in recordings)
                 {
-                    Debug.Log($"Loading segment {recording.filename}");
+                    logger.Log($"Loading segment {recording.filename}");
                     var segment = FromFile(Path.Combine(baseDir, recording.filename));
 
                     combinedTouchData.AddRange(segment.GetAllTouchData(segmentDir, depth + 1));
@@ -1838,9 +2055,9 @@ namespace UnityEngine.EventSystems
 
             public void AddRecording(string recordingFileName)
             {
-                Debug.Log("recordingFileName " + recordingFileName);
+                logger.Log("recordingFileName " + recordingFileName);
                 var newRecording = new Recording { filename = recordingFileName };
-                Debug.Log("newRecording " + newRecording);
+                logger.Log("newRecording " + newRecording);
                 recordings.Add(newRecording);
             }
 
@@ -1888,12 +2105,12 @@ namespace UnityEngine.EventSystems
 
         public bool IsPlaybackCompleted()
         {
-            return _recordingMode == RecordingMode.Playback && _current_index >= touchData.Count;
+            return (_recordingMode == RecordingMode.Playback || ReportingManager.IsCrawler) && _current_index >= touchData.Count;
         }
 
-        private bool IsPlaybackActive()
+        public bool IsPlaybackActive()
         {
-            return _recordingMode == RecordingMode.Playback || _recordingMode == RecordingMode.Extend;
+            return _recordingMode == RecordingMode.Playback || ReportingManager.IsCrawler || _recordingMode == RecordingMode.Extend;
         }
     }
 }

@@ -56,7 +56,7 @@ public class DragFeedback : MonoBehaviour
             newPos.y = -newPos.y;
         }
         gameObject.transform.position = new Vector3(newPos.x, newPos.y, 0);
-        yield return new WaitForEndOfFrame();
+        yield return null;
         if (!mouseDown)
         {
             Destroy(gameObject, time);

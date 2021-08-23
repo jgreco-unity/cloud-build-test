@@ -38,6 +38,7 @@ namespace Unity.AutomatedQA
         public virtual void BeginAutomation()
         {
             state = State.IN_PROGRESS;
+            ReportingManager.IsAutomatorTest = true;
         }
 
         public virtual void EndAutomation()
@@ -45,7 +46,8 @@ namespace Unity.AutomatedQA
             state = State.COMPLETE;
 
             OnAutomationFinished.Invoke(new AutomationFinishedEvent.Args(this));
-            if (ReportingManager.IsAutomatorTest)
+            // If this is a single test run from an Automated Run editor window, finalize the report.
+            if (ReportingManager.IsPlaybackStartedFromEditorWindow)
                 ReportingManager.FinalizeReport();
         }
 
@@ -55,6 +57,14 @@ namespace Unity.AutomatedQA
     public abstract class Automator<T> : Automator where T : AutomatorConfig
     {
         protected T config;
+
+        protected AQALogger logger;
+
+
+        private void Awake()
+        {
+            logger = new AQALogger();
+        }
 
         public sealed override void Init()
         {

@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using UnityEngine;
+using Unity.RecordedPlayback;
 #if UNITY_EDITOR
 using UnityEditor;
 #endif
@@ -11,11 +12,9 @@ namespace Unity.AutomatedQA
     {
         private AutomatedRun.RunConfig runConfig = null;
 
-        public bool quitOnFinish = false;
-        
         private List<Automator> automators = new List<Automator>();
         private int currentIndex = 0;
-        private bool initialized = false;
+        public static bool Initialized { get; set; }
 
         private static CentralAutomationController _instance = null;
         public static CentralAutomationController Instance {
@@ -30,23 +29,25 @@ namespace Unity.AutomatedQA
                 return _instance;
             }
         }
-
+        
         public void Run(AutomatedRun.RunConfig runConfig = null)
         {
-            if (initialized)
+            if (Initialized)
             {
                 return;
             }
 
-            initialized = true;
+            if (runConfig == null)
+            {
+                runConfig = new AutomatedRun.RunConfig();
+            }
+
+            Initialized = true;
             this.runConfig = runConfig;
 
-            if (runConfig != null)
+            foreach (var automatorConfig in runConfig.automators)
             {
-                foreach (var automatorConfig in runConfig.automators)
-                {
-                    AddAutomator(automatorConfig);
-                }
+                AddAutomator(automatorConfig);
             }
             BeginAutomator();
 
@@ -106,6 +107,13 @@ namespace Unity.AutomatedQA
             return automator;
         }
 
+        public void ResetAutomators()
+        {
+            currentIndex = 0;
+            Initialized = false;
+            automators = new List<Automator>();
+        }
+
         public void Reset()
         {
             foreach (var automator in automators)
@@ -115,27 +123,24 @@ namespace Unity.AutomatedQA
             }
 
             runConfig = null;
-            quitOnFinish = false;
             automators = new List<Automator>();
             currentIndex = 0;
-            initialized = false;
+            Initialized = false;
 
             Destroy(gameObject);
             _instance = null;
         }
 
-        
         private void SubscribeEvents(Automator automator)
         {
             automator.OnAutomationFinished.AddListener(OnAutomationFinished);
         }
-        
-        
+
         private void OnAutomationFinished(Automator.AutomationFinishedEvent.Args args)
         {
             currentIndex++;
 
-            if (quitOnFinish && currentIndex >= automators.Count)
+            if (runConfig.quitOnFinish && currentIndex >= automators.Count)
             {
                 #if UNITY_EDITOR
                 EditorApplication.ExitPlaymode();
@@ -153,7 +158,6 @@ namespace Unity.AutomatedQA
             {
                 automators[currentIndex].BeginAutomation();
             }
-
         }
 
         public bool IsAutomationComplete()
@@ -186,6 +190,10 @@ namespace Unity.AutomatedQA
 
             return results;
         }
-    }
 
+        public List<Automator> GetAllAutomators()
+        {
+            return automators;
+        }
+    }
 }

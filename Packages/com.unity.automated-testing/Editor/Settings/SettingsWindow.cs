@@ -51,13 +51,13 @@ namespace Unity.RecordedPlayback.Editor
 			if (wnd == null)
 				ShowWindow();
 			if (!initialized)
-            {
+			{
 				SetUpView();
 				initialized = true;
 			}
 		}
 
-		void SetUpView() 
+		void SetUpView()
 		{
 			toggles = new List<Toggle>();
 			textFields = new List<TextField>();
@@ -95,14 +95,13 @@ namespace Unity.RecordedPlayback.Editor
 
 			wnd = GetWindow<SettingsWindow>(); //Use to determine window size before ShowWindow is invoked.
 			classBasedOnCurrentEditorColorTheme = EditorGUIUtility.isProSkin ? "editor-is-dark-theme" : "editor-is-light-theme";
-			// Each editor window contains a root VisualElement object
+
 			VisualElement baseRoot = rootVisualElement;
 			rootVisualElement.Clear();
 
-			// VisualElements objects can contain other VisualElement following a tree hierarchy.
 			var visualTree = AssetDatabase.LoadAssetAtPath<VisualTreeAsset>(resourcePath + $"{WINDOW_FILE_NAME}.uxml");
 			visualTree.CloneTree(baseRoot);
-			// A stylesheet can be added to a VisualElement and will be applied to all its children
+
 			baseRoot.styleSheets.Add(AssetDatabase.LoadAssetAtPath<StyleSheet>(resourcePath + $"{WINDOW_FILE_NAME}.uss"));
 			LoadConfigData();
 
@@ -139,8 +138,8 @@ namespace Unity.RecordedPlayback.Editor
 			}
 		}
 
-		void AddConfigSet(string keyText, string valueText) 
-		{	
+		void AddConfigSet(string keyText, string valueText)
+		{
 			VisualElement row = new VisualElement();
 			Button deleteCustomConfigButton = new Button();
 			deleteCustomConfigButton.text = "X";
@@ -151,7 +150,7 @@ namespace Unity.RecordedPlayback.Editor
 
 			Label key = new Label();
 			key.text = AddSpacesBeforeUppercaseLettersAndInPlaceOfUnderscores(keyText);
-			key.tooltip = keyText;
+			key.tooltip = GetTooltip(keyText);
 			key.AddToClassList("settings-field-label");
 			key.AddToClassList("delete-button-offset");
 			row.Add(key);
@@ -276,6 +275,7 @@ namespace Unity.RecordedPlayback.Editor
 			oldSettings.RemoveAll(os => os.Key == key);
 			toggles.RemoveAll(to => to.name == key);
 			textFields.RemoveAll(tf => tf.name == key);
+			SortAlphabetically(newConfig.Configs);
 
 			//Overwrite and save settings to file.
 			File.WriteAllText(Path.Combine(Application.dataPath, AutomatedQARuntimeSettings.AutomatedQASettingsResourcesPath, AutomatedQARuntimeSettings.AutomatedQaSettingsFileName),
@@ -283,12 +283,12 @@ namespace Unity.RecordedPlayback.Editor
 			AutomatedQARuntimeSettings.RefreshConfig();
 		}
 
-		void SaveNewConfig() 
+		void SaveNewConfig()
 		{
 			string newKey = newConfigKey.text.Trim();
 			string newValue = newConfigValue.text.Trim();
 			ClearErrors();
-			(string Key, string Value) existingMatch = 
+			(string Key, string Value) existingMatch =
 				oldSettings.Find(x => x.Key.ToLowerInvariant().Replace("_", string.Empty) == newKey.ToLowerInvariant().Replace("_", string.Empty));
 			bool errorDetected = existingMatch != default((string Key, string Value));
 			string errorMessage = "A key already exists with an identical name (or with the only difference being casing or underscores). Please choose a different key.";
@@ -298,13 +298,13 @@ namespace Unity.RecordedPlayback.Editor
 				errorMessage = "Invalid characters in key. Key should be alpha-numeric, with underscores or camel casing used for multi-word keys.";
 			}
 
-			if (errorDetected) 
+			if (errorDetected)
 			{
 				notification.visible = true;
 				notification.text = errorMessage;
 				notification.AddToClassList("error-label");
 				Toggle toggle = toggles.Find(to => to.name == existingMatch.Key);
-				if(toggle != null)
+				if (toggle != null)
 					toggle.AddToClassList(".setting-error");
 				TextField textField = textFields.Find(tf => tf.name == existingMatch.Key);
 				if (textField != null)
@@ -320,6 +320,8 @@ namespace Unity.RecordedPlayback.Editor
 				newConfig.Configs.Add(new AutomatedQARuntimeSettings.AutomationSet(currentKey, currentValue));
 			}
 			newConfig.Configs.Add(new AutomatedQARuntimeSettings.AutomationSet(newKey, newValue));
+			SortAlphabetically(newConfig.Configs);
+
 			// Save old settings plus newly added setting to file.
 			File.WriteAllText(Path.Combine(Application.dataPath, AutomatedQARuntimeSettings.AutomatedQASettingsResourcesPath, AutomatedQARuntimeSettings.AutomatedQaSettingsFileName),
 				JsonUtility.ToJson(newConfig));
@@ -369,9 +371,10 @@ namespace Unity.RecordedPlayback.Editor
 			{
 				newConfig.Configs.Add(new AutomatedQARuntimeSettings.AutomationSet(settings[i].Key, settings[i].Value));
 			}
+			SortAlphabetically(newConfig.Configs);
 
 			//Overwrite and save settings to file.
-			File.WriteAllText(Path.Combine(Application.dataPath, AutomatedQARuntimeSettings.AutomatedQASettingsResourcesPath, AutomatedQARuntimeSettings.AutomatedQaSettingsFileName), 
+			File.WriteAllText(Path.Combine(Application.dataPath, AutomatedQARuntimeSettings.AutomatedQASettingsResourcesPath, AutomatedQARuntimeSettings.AutomatedQaSettingsFileName),
 				JsonUtility.ToJson(newConfig));
 			AutomatedQARuntimeSettings.RefreshConfig();
 			SetUpView();
@@ -386,6 +389,23 @@ namespace Unity.RecordedPlayback.Editor
 				to.RemoveFromClassList(".setting-error");
 			foreach (TextField tf in textFields)
 				tf.RemoveFromClassList(".setting-error");
+		}
+
+		List<AutomatedQARuntimeSettings.AutomationSet> SortAlphabetically(List<AutomatedQARuntimeSettings.AutomationSet> list)
+		{
+			List<string> comparable = new List<string>();
+			foreach (AutomatedQARuntimeSettings.AutomationSet item in list)
+			{
+				comparable.Add(item.Key);
+			}
+			comparable.Sort();
+
+			List<AutomatedQARuntimeSettings.AutomationSet> sortedList = new List<AutomatedQARuntimeSettings.AutomationSet>();
+			foreach (string item in comparable)
+			{
+				sortedList.Add(list.Find(x => x.Key == item));
+			}
+			return sortedList;
 		}
 
 		/// <summary>
@@ -406,6 +426,16 @@ namespace Unity.RecordedPlayback.Editor
 			return !invalidCharDetected;
 		}
 
+		private static string GetTooltip(string key)
+		{
+			if (AutomatedQARuntimeSettings.Tooltips.TryGetValue(key, out string tooltip))
+			{
+				return tooltip;
+			}
+
+			return key;
+		}
+		
 		private static string AddSpacesBeforeUppercaseLettersAndInPlaceOfUnderscores(string val)
 		{
 			StringBuilder returnVal = new StringBuilder();

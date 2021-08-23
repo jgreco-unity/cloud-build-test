@@ -1,10 +1,7 @@
-using System;
-using System.Collections.Generic;
-using System.IO;
+using TestPlatforms.Cloud;
 using Unity.CloudTesting.Editor;
 using UnityEditor;
 using UnityEditor.TestTools;
-using UnityEngine;
 
 [assembly:TestPlayerBuildModifier(typeof(CloudTestRunner))]
 
@@ -19,9 +16,9 @@ namespace Unity.CloudTesting.Editor
             {
                 playerOptions.options &= ~(BuildOptions.AutoRunPlayer);
 #if UNITY_IOS
-                playerOptions.locationPathName = CloudTestPipeline.IOSBuildDir;
+                playerOptions.locationPathName = CloudTestConfig.IOSBuildDir;
 #else
-                playerOptions.locationPathName = CloudTestPipeline.BuildPath;
+                playerOptions.locationPathName = CloudTestConfig.BuildPath;
 #endif
 
                 return playerOptions;    
