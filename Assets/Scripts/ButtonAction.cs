@@ -1,7 +1,7 @@
 ﻿using UnityEngine;
 using UnityEngine.UI;
 
-public class ButtonAction : MonoBehaviour
+ppublic class ButtonAction : MonoBehaviour
 {
     public static int count = 0;
   
