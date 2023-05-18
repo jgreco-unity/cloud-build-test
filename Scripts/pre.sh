@@ -1,5 +1,10 @@
 #!/bin/sh
-export TEST_ENV_VAR=abc
-env
-echo "test_env=here i am" >> "$DEVOPS_ENV"
+echo "prebuild script begin"
+
+export TEST_ENV_VAR="abc"
+export TEST_ENV_EXPORT="hello world"
+
+env | grep -e 'TEST' -e 'BUILD'
+
+echo "TEST_ENV_EXPORT=$TEST_ENV_EXPORT" >> "$DEVOPS_ENV"
 echo "UCB_BUILD_NUMBER=123" >> "$DEVOPS_ENV"
