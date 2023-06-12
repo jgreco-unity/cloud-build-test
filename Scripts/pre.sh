@@ -1,6 +1,8 @@
 #!/bin/sh
 echo "prebuild script begin"
 
+df -h /
+
 export TEST_ENV_VAR="abc"
 export TEST_ENV_EXPORT="hello world"
 export UCB_BUILD_NUMBER=123
