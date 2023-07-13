@@ -3,6 +3,8 @@ echo "prebuild script begin"
 
 df -h /
 
+find . -name ".gradle"
+
 export TEST_ENV_VAR="abc"
 export TEST_ENV_EXPORT="hello world"
 export UCB_BUILD_NUMBER=123
