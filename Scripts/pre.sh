@@ -2,8 +2,10 @@
 echo "prebuild script begin"
 
 df -h /
+df -g / | tail -1 | awk '{print $3}'
 
-find . -name ".gradle"
+pwd
+find ../.. -name ".gradle"
 
 export TEST_ENV_VAR="abc"
 export TEST_ENV_EXPORT="hello world"
