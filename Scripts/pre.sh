@@ -5,7 +5,7 @@ df -h /
 df --help
 
 pwd | rev
-find ../../.. -name ".gradle"
+find ../../../.. -name ".gradle"
 
 export TEST_ENV_VAR="abc"
 export TEST_ENV_EXPORT="hello world"
