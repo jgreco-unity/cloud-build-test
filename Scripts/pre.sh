@@ -4,6 +4,8 @@ echo "prebuild script begin"
 df -h /
 df --help
 
+ls /
+
 pwd | rev
 
 export TEST_ENV_VAR="abc"
