@@ -1,10 +1,9 @@
 #!/bin/sh
 echo "prebuild script begin"
 
-df -h /
-df --help
-
 ls /
+
+find /Applications/Unity.app/ -type d -name AndroidPlayer
 
 pwd | rev
 
