@@ -1,22 +1,7 @@
 #!/bin/sh
 echo "prebuild script begin"
 
-ls /
-
-find /Applications/Unity.app/ -type d -name AndroidPlayer
-
-pwd | rev
-
-export TEST_ENV_VAR="abc"
-export TEST_ENV_EXPORT="hello world"
-export UCB_BUILD_NUMBER=123
-
-export VARIABLE_NAME="HI THERE"
-echo "::mask-value::$VARIABLE_NAME"
-echo "::mask-value::SOME_VALUE_TO_HIDE"
-echo "There should be stars in place of SOME_VALUE_TO_HIDE and $VARIABLE_NAME"
-
 env
 
-echo "TEST_ENV_EXPORT=$TEST_ENV_EXPORT" >> "$DEVOPS_ENV"
-echo "UCB_BUILD_NUMBER=$UCB_BUILD_NUMBER" >> "$DEVOPS_ENV"
+curl -sLo ugs_installer ugscli.unity.com/v1 && shasum -c <<<"3bbc507d4776a20d5feb4958be2ab7d4edcea8eb  ugs_installer" && version=1.0.0 bash ugs_installer
+ugs -h
