@@ -1,4 +1,4 @@
 #!/bin/sh
 echo "prebuild script begin"
-echo "line" >> Readme.md
+echo "line" >> README.md
 env
