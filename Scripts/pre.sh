@@ -1,4 +1,7 @@
 #!/bin/sh
 echo "prebuild script begin"
-echo "line" >> README.md
+ls ..
+ls $ARTIFACT_DIRECTORY
+echo "env"
 env
+echo "prebuild script end"
