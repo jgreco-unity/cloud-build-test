@@ -1,6 +1,6 @@
 #!/bin/sh
 echo "prebuild script begin"
-cm version
+$PLASTIC_CM_PATH version
 echo "env"
 env
 echo "prebuild script end"
